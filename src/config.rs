@@ -62,6 +62,12 @@ pub struct Mod {
     pub id: String,
 }
 
+impl Mod {
+    pub fn read_config() -> Result<Self> {
+        load_toml("./Merge.toml")
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// A mapping from untiy versions to their install paths

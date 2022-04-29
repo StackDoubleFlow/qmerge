@@ -22,7 +22,7 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Build => build::build(),
+        Commands::Build => build::build()?,
         Commands::Upload => todo!(),
     }
 

@@ -1,0 +1,4 @@
+app = "com.beatgames.beatsaber"
+name = "MergeExample"
+version = "0.1.0"
+id = "merge_example"

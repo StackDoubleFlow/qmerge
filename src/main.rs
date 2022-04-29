@@ -9,7 +9,4 @@ use crate::error::exit_on_err;
 
 fn main() {
     exit_on_err(cli::run());
-
-    dbg!(&*config::CONFIG);
-    dbg!(&*config::APPS);
 }
