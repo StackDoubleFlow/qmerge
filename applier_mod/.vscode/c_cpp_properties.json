@@ -1,0 +1,27 @@
+{
+  "configurations": [
+    {
+      "defines": [
+        "MOD_ID=\"merge_applier\"",
+        "VERSION=\"0.1.0\"",
+        "__GNUC__",
+        "__aarch64__"
+      ],
+      "includePath": [
+        "${workspaceFolder}/extern/includes/libil2cpp/il2cpp/libil2cpp",
+        "${workspaceFolder}/extern/includes",
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/shared",
+        "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+        "${ANDROID_NDK_HOME}/sources/cxx-stl/llvm-libc++/include",
+        "${ANDROID_NDK_HOME}/sources/cxx-stl/llvm-libc++abi/include"
+      ],
+      "name": "Quest",
+      "compilerPath": "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+      "cStandard": "c11",
+      "cppStandard": "c++20",
+      "intelliSenseMode": "clang-x64"
+    }
+  ],
+  "version": 4
+}

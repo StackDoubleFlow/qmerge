@@ -42,7 +42,7 @@ else {
     echo "Building debug binary"
 }
 
-& cmake -G "Ninja" -DCMAKE_BUILD_TYPE="$buildType" -B build
+# & cmake -G "Ninja" -DCMAKE_BUILD_TYPE="$buildType" -B build
 & cmake --build ./build
 $ExitCode = $LastExitCode
 exit $ExitCode
