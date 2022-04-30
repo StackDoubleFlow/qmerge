@@ -167,7 +167,7 @@ pub fn build() -> Result<()> {
     let transformed_path = Path::new("./build/transformed");
 
     let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
-    let types = type_definitions::parse(types_src)?;
+    let types = type_definitions::parse(&types_src)?;
 
     let mut usages = HashSet::new();
 

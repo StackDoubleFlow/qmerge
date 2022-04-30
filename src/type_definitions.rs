@@ -127,19 +127,19 @@ impl Il2CppTypeEnum {
     }
 }
 
-pub enum Il2CppTypeData {
+pub enum Il2CppTypeData<'src> {
     Idx(usize),
-    Ptr(String),
+    Ptr(&'src str),
 }
 
-pub struct Il2CppType {
-    pub data: Il2CppTypeData,
+pub struct Il2CppType<'src> {
+    pub data: Il2CppTypeData<'src>,
     pub attrs: u16,
     pub ty: Il2CppTypeEnum,
     pub byref: bool,
 }
 
-pub fn parse(src: String) -> Result<Vec<Il2CppType>> {
+pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
     let mut types = HashMap::new();
     for line in src.lines() {
         if line.starts_with("const Il2CppType ") {
@@ -151,7 +151,7 @@ pub fn parse(src: String) -> Result<Vec<Il2CppType>> {
             let byref = words[9].trim_end_matches(',').parse::<u8>()? != 0;
 
             let data = if let Some(data) = data.strip_prefix('&') {
-                Il2CppTypeData::Ptr(data.to_owned())
+                Il2CppTypeData::Ptr(data)
             } else {
                 Il2CppTypeData::Idx(data.parse()?)
             };
