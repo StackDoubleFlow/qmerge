@@ -32,6 +32,8 @@ pub struct ModDataBuilder<'md, 'ty> {
     type_map: HashMap<u32, usize>,
 
     methods: Vec<MethodDescription>,
+    // I'm not sure why methods are duplicated sometimes
+    // method_map: HashMap<u32, usize>,
 }
 
 impl<'md, 'ty> ModDataBuilder<'md, 'ty> {

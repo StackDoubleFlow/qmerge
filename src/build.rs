@@ -7,6 +7,7 @@ use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
 
@@ -154,7 +155,7 @@ fn process_other(
     Ok(new_src)
 }
 
-pub fn build() -> Result<()> {
+pub fn build(regen_cpp: bool) -> Result<()> {
     let mod_config = Mod::read_config()?;
     let app = APPS
         .get(&mod_config.app)
@@ -168,15 +169,17 @@ pub fn build() -> Result<()> {
     let mono_path = unity_path.join("Editor/Data/MonoBleedingEdge/bin/mono");
     let il2cpp_path = unity_path.join("Editor/Data/il2cpp/build/deploy/net471/il2cpp.exe");
 
-    // Command::new(mono_path)
-    //     // Fix for System.ConsoleDriver type initializer
-    //     .env("TERM", "xterm")
-    //     .arg(il2cpp_path)
-    //     .arg("--convert-to-cpp")
-    //     .arg("--directory=./build/Managed")
-    //     .arg("--generatedcppdir=./build/cpp")
-    //     .status()
-    //     .context("il2cpp command failed")?;
+    if regen_cpp {
+        Command::new(mono_path)
+            // Fix for System.ConsoleDriver type initializer
+            .env("TERM", "xterm")
+            .arg(il2cpp_path)
+            .arg("--convert-to-cpp")
+            .arg("--directory=./build/Managed")
+            .arg("--generatedcppdir=./build/cpp")
+            .status()
+            .context("il2cpp command failed")?;
+    }
 
     let metadata_data = fs::read("./build/cpp/Data/Metadata/global-metadata.dat")
         .context("failed to read generated metadata")?;
