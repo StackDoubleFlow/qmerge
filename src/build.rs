@@ -1,10 +1,9 @@
 use crate::config::{Mod, APPS, CONFIG};
+use crate::type_definitions;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
-use std::fs::FileType;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
 
@@ -167,6 +166,9 @@ pub fn build() -> Result<()> {
     let cpp_path = Path::new("./build/cpp");
     let transformed_path = Path::new("./build/transformed");
 
+    let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
+    let types = type_definitions::parse(types_src)?;
+
     let mut usages = HashSet::new();
 
     for i in 0.. {
@@ -182,7 +184,7 @@ pub fn build() -> Result<()> {
             while let Some(line) = lines.next() {
                 if (line.starts_with("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR")
                     || line.starts_with("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR"))
-                        && *lines.peek().unwrap() == "{"
+                    && *lines.peek().unwrap() == "{"
                 {
                     lines.next().unwrap();
                     get_function_usages(&mut usages, &mut lines);
@@ -207,7 +209,9 @@ pub fn build() -> Result<()> {
                     let src = fs::read_to_string(src_path)?;
                     let new_src = process_other(&usages, src);
                     let new_path = transformed_path.join(path);
-                    fs::write(&new_path, new_src).with_context(|| format!("error writing transformed source to {}", new_path.display()))?;
+                    fs::write(&new_path, new_src).with_context(|| {
+                        format!("error writing transformed source to {}", new_path.display())
+                    })?;
                 } else {
                     break;
                 }
