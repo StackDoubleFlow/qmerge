@@ -3,8 +3,9 @@ use crate::data::{get_str, ModDataBuilder};
 use crate::modules::CodeGenModule;
 use crate::{modules, type_definitions};
 use anyhow::{bail, Context, Result};
-use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
+use il2cpp_metadata_raw::{Il2CppImageDefinition, Il2CppMethodDefinition, Metadata};
 use std::collections::HashSet;
+use std::fmt::Write;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -23,17 +24,33 @@ fn offset_len(offset: u32, len: u32) -> std::ops::Range<usize> {
     offset as usize..offset as usize + len as usize
 }
 
-pub fn try_parse_fn_def(line: &str) -> Option<&str> {
-    let name = if line.starts_with("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
-        let words: Vec<&str> = line.split_whitespace().collect();
-        words[3]
-    } else if line.starts_with("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR") {
-        let words: Vec<&str> = line.split_whitespace().collect();
-        words[4]
-    } else {
-        return None;
-    };
-    Some(name)
+struct FnDef<'a> {
+    return_ty: &'a str,
+    name: &'a str,
+    params: &'a str,
+}
+
+impl<'a> FnDef<'a> {
+    fn try_parse(line: &'a str) -> Option<Self> {
+        let line = if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
+            line
+        } else {
+            line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR")?
+        };
+
+        let param_start = line.find('(')?;
+        let params = &line[param_start..];
+        let rest = line[..param_start].trim();
+
+        let name = rest.split_whitespace().last()?;
+        let return_ty = rest[..rest.len() - name.len()].trim();
+
+        Some(FnDef {
+            return_ty,
+            name,
+            params,
+        })
+    }
 }
 
 pub fn try_parse_call(line: &str) -> Option<&str> {
@@ -102,8 +119,17 @@ fn find_method_with_rid(
     bail!("could not find method with rid {}", rid);
 }
 
+fn method_params(metadata: &Metadata, method: &Il2CppMethodDefinition) -> Vec<u32> {
+    let range = offset_len(method.parameter_start, method.parameter_count as u32);
+    metadata.parameters[range]
+        .iter()
+        .map(|p| p.type_index as u32)
+        .collect()
+}
+
 fn process_other(
     usages: &HashSet<String>,
+    mod_id: &str,
     src: String,
     image: &Il2CppImageDefinition,
     module: &CodeGenModule,
@@ -112,40 +138,43 @@ fn process_other(
     let mut lines = src.lines().peekable();
     let mut new_src = String::new();
 
+    let mut add_method = |cpp_name: &str| -> Result<usize> {
+        let method_rid = module
+            .methods
+            .iter()
+            .position(|n| n == &Some(cpp_name))
+            .context("could not find method in module")? as u32;
+        let method_idx = find_method_with_rid(data_builder.metadata, image, method_rid)?;
+        let method = &data_builder.metadata.methods[method_idx];
+        let name = get_str(data_builder.metadata.string, method.name_index as usize)?;
+        let params = method_params(data_builder.metadata, method);
+        data_builder.add_method(name, method.declaring_type, &params, method.return_type)
+    };
+
     while let Some(line) = lines.next() {
         // Copy over function definitions and replace body with merge stub
-        if let Some(name) = try_parse_fn_def(line) {
-            if *lines.peek().unwrap() == "{" && usages.contains(name) {
+        if let Some(fn_def) = FnDef::try_parse(line) {
+            if *lines.peek().unwrap() == "{" && usages.contains(fn_def.name) {
                 push_line(&mut new_src, line);
+                let idx = add_method(fn_def.name)?;
+                let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
+                let params: Vec<String> = params
+                    .split(',')
+                    .map(|param| param.split_whitespace().last())
+                    .collect::<Option<Vec<&str>>>()
+                    .unwrap()
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                let params = params.join(", ");
 
-                let method_rid = module
-                    .methods
-                    .iter()
-                    .position(|n| n == &Some(name))
-                    .context("could not find method in module")?
-                    as u32;
-                let method_idx = find_method_with_rid(data_builder.metadata, image, method_rid)?;
-                let method = &data_builder.metadata.methods[method_idx];
-                let name = get_str(data_builder.metadata.string, method.name_index as usize)?;
-                let params: Vec<u32> = data_builder.metadata.parameters
-                    [offset_len(method.parameter_start, method.parameter_count as u32)]
-                .iter()
-                .map(|p| p.type_index as u32)
-                .collect();
-                data_builder.add_method(
-                    name,
-                    method.declaring_type,
-                    &params,
-                    method.return_type,
+                writeln!(&mut new_src, "{{")?;
+                writeln!(
+                    &mut new_src,
+                    "    return (({} (*){})(merge_get_method(\"{}\", {})))({});",
+                    fn_def.return_ty, fn_def.params, mod_id, idx, params
                 )?;
-
-                new_src.push_str("{\n    // TODO: merge stub\n}");
-                // for line in &mut lines {
-                //     push_line(&mut new_src, line);
-                //     if line == "}" {
-                //         break;
-                //     }
-                // }
+                writeln!(&mut new_src, "}}")?;
             }
         } else if line.starts_with("#include") {
             push_line(&mut new_src, line);
@@ -248,7 +277,14 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                 let src_path = cpp_path.join(&path);
                 if src_path.exists() {
                     let src = fs::read_to_string(src_path)?;
-                    let new_src = process_other(&usages, src, image, &module, &mut data_builder)?;
+                    let new_src = process_other(
+                        &usages,
+                        &mod_config.id,
+                        src,
+                        image,
+                        &module,
+                        &mut data_builder,
+                    )?;
                     let new_path = transformed_path.join(path);
                     fs::write(&new_path, new_src).with_context(|| {
                         format!("error writing transformed source to {}", new_path.display())

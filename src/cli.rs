@@ -15,7 +15,7 @@ enum Commands {
     /// Compile mod in working directory
     Build {
         #[clap(long)]
-        regen_cpp: bool
+        regen_cpp: bool,
     },
     /// Upload the generated mod files
     Upload,
