@@ -1,5 +1,5 @@
 use crate::config::{Mod, APPS, CONFIG};
-use crate::type_definitions;
+use crate::{modules, type_definitions};
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::iter::Peekable;
@@ -197,6 +197,9 @@ pub fn build() -> Result<()> {
 
     for assembly in &metadata.assemblies {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
+        let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
+            .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
+        let module = modules::parse(&code_gen_src)?;
         if name != mod_config.id {
             for i in 0.. {
                 let path = if i > 0 {
