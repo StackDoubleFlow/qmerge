@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Il2CppTypeEnum {
     Void,
     Boolean,
@@ -127,11 +127,13 @@ impl Il2CppTypeEnum {
     }
 }
 
+#[derive(Debug)]
 pub enum Il2CppTypeData<'src> {
     Idx(usize),
     Ptr(&'src str),
 }
 
+#[derive(Debug)]
 pub struct Il2CppType<'src> {
     pub data: Il2CppTypeData<'src>,
     pub attrs: u16,

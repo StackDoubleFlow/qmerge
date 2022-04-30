@@ -1,6 +1,9 @@
 use crate::config::{Mod, APPS, CONFIG};
+use crate::data::{get_str, ModDataBuilder};
+use crate::modules::CodeGenModule;
 use crate::{modules, type_definitions};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
@@ -12,25 +15,11 @@ fn push_line(s: &mut String, line: &str) {
     s.push('\n');
 }
 
-// fn offset_len<L>(offset: i32, len: L) -> std::ops::Range<usize> where L: TryInto<usize> {
-//     if offset < 0 {
-//         return 0..0;
-//     }
-//     offset as usize..offset as usize + len as usize
-// }
-
-fn strlen(data: &[u8], offset: usize) -> usize {
-    let mut len = 0;
-    while data[offset + len] != 0 {
-        len += 1;
+fn offset_len(offset: u32, len: u32) -> std::ops::Range<usize> {
+    if (offset as i32) < 0 {
+        return 0..0;
     }
-    len
-}
-
-fn get_str(data: &[u8], offset: usize) -> Result<&str> {
-    let len = strlen(data, offset);
-    let str = str::from_utf8(&data[offset..offset + len])?;
-    Ok(str)
+    offset as usize..offset as usize + len as usize
 }
 
 pub fn try_parse_fn_def(line: &str) -> Option<&str> {
@@ -96,7 +85,29 @@ fn get_function_usages(usages: &mut HashSet<String>, lines: &mut PeekableLines) 
     }
 }
 
-fn process_other(usages: &HashSet<String>, src: String) -> String {
+fn find_method_with_rid(
+    metadata: &Metadata,
+    image: &Il2CppImageDefinition,
+    rid: u32,
+) -> Result<usize> {
+    for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
+        for i in offset_len(type_def.method_start, type_def.method_count as u32) {
+            if metadata.methods[i].token & 0x00FFFFFF == rid {
+                return Ok(i);
+            }
+        }
+    }
+
+    bail!("could not find method with rid {}", rid);
+}
+
+fn process_other(
+    usages: &HashSet<String>,
+    src: String,
+    image: &Il2CppImageDefinition,
+    module: &CodeGenModule,
+    data_builder: &mut ModDataBuilder,
+) -> Result<String> {
     let mut lines = src.lines().peekable();
     let mut new_src = String::new();
 
@@ -105,6 +116,28 @@ fn process_other(usages: &HashSet<String>, src: String) -> String {
         if let Some(name) = try_parse_fn_def(line) {
             if *lines.peek().unwrap() == "{" && usages.contains(name) {
                 push_line(&mut new_src, line);
+
+                let method_rid = module
+                    .methods
+                    .iter()
+                    .position(|n| n == &Some(name))
+                    .context("could not find method in module")?
+                    as u32;
+                let method_idx = find_method_with_rid(data_builder.metadata, image, method_rid)?;
+                let method = &data_builder.metadata.methods[method_idx];
+                let name = get_str(data_builder.metadata.string, method.name_index as usize)?;
+                let params: Vec<u32> = data_builder.metadata.parameters
+                    [offset_len(method.parameter_start, method.parameter_count as u32)]
+                .iter()
+                .map(|p| p.type_index as u32)
+                .collect();
+                data_builder.add_method(
+                    name,
+                    method.declaring_type,
+                    &params,
+                    method.return_type,
+                )?;
+
                 new_src.push_str("{\n    // TODO: merge stub\n}");
                 // for line in &mut lines {
                 //     push_line(&mut new_src, line);
@@ -118,7 +151,7 @@ fn process_other(usages: &HashSet<String>, src: String) -> String {
         }
     }
 
-    new_src
+    Ok(new_src)
 }
 
 pub fn build() -> Result<()> {
@@ -168,6 +201,7 @@ pub fn build() -> Result<()> {
 
     let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
     let types = type_definitions::parse(&types_src)?;
+    let mut data_builder = ModDataBuilder::new(&metadata, &types);
 
     let mut usages = HashSet::new();
 
@@ -200,6 +234,7 @@ pub fn build() -> Result<()> {
         let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
             .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
         let module = modules::parse(&code_gen_src)?;
+        let image = &metadata.images[assembly.image_index as usize];
         if name != mod_config.id {
             for i in 0.. {
                 let path = if i > 0 {
@@ -210,7 +245,7 @@ pub fn build() -> Result<()> {
                 let src_path = cpp_path.join(&path);
                 if src_path.exists() {
                     let src = fs::read_to_string(src_path)?;
-                    let new_src = process_other(&usages, src);
+                    let new_src = process_other(&usages, src, image, &module, &mut data_builder)?;
                     let new_path = transformed_path.join(path);
                     fs::write(&new_path, new_src).with_context(|| {
                         format!("error writing transformed source to {}", new_path.display())
@@ -221,6 +256,8 @@ pub fn build() -> Result<()> {
             }
         }
     }
+
+    dbg!(data_builder.build());
 
     Ok(())
 }
