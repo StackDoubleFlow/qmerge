@@ -18,7 +18,6 @@ pub enum Il2CppTypeEnum {
     R8,
     String,
     Ptr,
-    Byref,
     Valuetype,
     Class,
     Var,
@@ -27,17 +26,9 @@ pub enum Il2CppTypeEnum {
     Typedbyref,
     I,
     U,
-    Fnptr,
     Object,
     Szarray,
     Mvar,
-    CmodReqd,
-    CmodOpt,
-    Internal,
-    Modifier,
-    Sentinel,
-    Pinned,
-    Enum,
 }
 
 impl Il2CppTypeEnum {
@@ -58,7 +49,6 @@ impl Il2CppTypeEnum {
             Il2CppTypeEnum::R8 => 0x0d,
             Il2CppTypeEnum::String => 0x0e,
             Il2CppTypeEnum::Ptr => 0x0f,
-            Il2CppTypeEnum::Byref => 0x10,
             Il2CppTypeEnum::Valuetype => 0x11,
             Il2CppTypeEnum::Class => 0x12,
             Il2CppTypeEnum::Var => 0x13,
@@ -67,19 +57,9 @@ impl Il2CppTypeEnum {
             Il2CppTypeEnum::Typedbyref => 0x16,
             Il2CppTypeEnum::I => 0x18,
             Il2CppTypeEnum::U => 0x19,
-            Il2CppTypeEnum::Fnptr => 0x1b,
             Il2CppTypeEnum::Object => 0x1c,
             Il2CppTypeEnum::Szarray => 0x1d,
             Il2CppTypeEnum::Mvar => 0x1e,
-            Il2CppTypeEnum::CmodReqd => 0x1f,
-            Il2CppTypeEnum::CmodOpt => 0x20,
-            Il2CppTypeEnum::Internal => 0x21,
-
-            Il2CppTypeEnum::Modifier => 0x40,
-            Il2CppTypeEnum::Sentinel => 0x41,
-            Il2CppTypeEnum::Pinned => 0x45,
-
-            Il2CppTypeEnum::Enum => 0x55,
         };
         Ok(ty_enum)
     }
@@ -101,7 +81,6 @@ impl Il2CppTypeEnum {
             "IL2CPP_TYPE_R8" => Il2CppTypeEnum::R8,
             "IL2CPP_TYPE_STRING" => Il2CppTypeEnum::String,
             "IL2CPP_TYPE_PTR" => Il2CppTypeEnum::Ptr,
-            "IL2CPP_TYPE_BYREF" => Il2CppTypeEnum::Byref,
             "IL2CPP_TYPE_VALUETYPE" => Il2CppTypeEnum::Valuetype,
             "IL2CPP_TYPE_CLASS" => Il2CppTypeEnum::Class,
             "IL2CPP_TYPE_VAR" => Il2CppTypeEnum::Var,
@@ -110,17 +89,9 @@ impl Il2CppTypeEnum {
             "IL2CPP_TYPE_TYPEDBYREF" => Il2CppTypeEnum::Typedbyref,
             "IL2CPP_TYPE_I" => Il2CppTypeEnum::I,
             "IL2CPP_TYPE_U" => Il2CppTypeEnum::U,
-            "IL2CPP_TYPE_FNPTR" => Il2CppTypeEnum::Fnptr,
             "IL2CPP_TYPE_OBJECT" => Il2CppTypeEnum::Object,
             "IL2CPP_TYPE_SZARRAY" => Il2CppTypeEnum::Szarray,
             "IL2CPP_TYPE_MVAR" => Il2CppTypeEnum::Mvar,
-            "IL2CPP_TYPE_CMOD_REQD" => Il2CppTypeEnum::CmodReqd,
-            "IL2CPP_TYPE_CMOD_OPT" => Il2CppTypeEnum::CmodOpt,
-            "IL2CPP_TYPE_INTERNAL" => Il2CppTypeEnum::Internal,
-            "IL2CPP_TYPE_MODIFIER" => Il2CppTypeEnum::Modifier,
-            "IL2CPP_TYPE_SENTINEL" => Il2CppTypeEnum::Sentinel,
-            "IL2CPP_TYPE_PINNED" => Il2CppTypeEnum::Pinned,
-            "IL2CPP_TYPE_ENUM" => Il2CppTypeEnum::Enum,
             _ => bail!("invalid type enum name: {}", name),
         };
         Ok(type_enum)
@@ -129,8 +100,16 @@ impl Il2CppTypeEnum {
 
 #[derive(Debug)]
 pub enum Il2CppTypeData<'src> {
-    Idx(usize),
-    Ptr(&'src str),
+    /// for VALUETYPE and CLASS (and I guess everything else)
+    TypeDefIdx(usize),
+    /// for VAR and MVAR
+    GenericParamIdx(usize),
+    /// for PTR and SZARRAY
+    Il2CppType(&'src str),
+    /// for ARRAY
+    Il2CppArrayType(&'src str),
+    /// for GENERICINST
+    Il2CppGenericClass(&'src str)
 }
 
 #[derive(Debug)]
@@ -152,11 +131,14 @@ pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
             let ty = Il2CppTypeEnum::from_name(words[7].trim_end_matches(','))?;
             let byref = words[9].trim_end_matches(',').parse::<u8>()? != 0;
 
-            let data = if let Some(data) = data.strip_prefix('&') {
-                Il2CppTypeData::Ptr(data)
-            } else {
-                Il2CppTypeData::Idx(data.parse()?)
+            let data = match ty {
+                Il2CppTypeEnum::Var | Il2CppTypeEnum::Mvar => Il2CppTypeData::GenericParamIdx(data.parse()?),
+                Il2CppTypeEnum::Ptr | Il2CppTypeEnum::Szarray => Il2CppTypeData::Il2CppType(data.trim_start_matches('&')),
+                Il2CppTypeEnum::Array => Il2CppTypeData::Il2CppArrayType(data.trim_start_matches('&')),
+                Il2CppTypeEnum::Genericinst => Il2CppTypeData::Il2CppGenericClass(data.trim_start_matches('&')),
+                _ => Il2CppTypeData::TypeDefIdx(data.parse()?),
             };
+
             let ty = Il2CppType {
                 data,
                 attrs,

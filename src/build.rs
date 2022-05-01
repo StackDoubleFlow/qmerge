@@ -1,9 +1,9 @@
 use crate::config::{Mod, APPS, CONFIG};
-use crate::data::{get_str, ModDataBuilder};
+use crate::data::{get_str, offset_len, ModDataBuilder};
 use crate::modules::CodeGenModule;
 use crate::{modules, type_definitions};
 use anyhow::{bail, Context, Result};
-use il2cpp_metadata_raw::{Il2CppImageDefinition, Il2CppMethodDefinition, Metadata};
+use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::iter::Peekable;
@@ -15,13 +15,6 @@ use std::{fs, str};
 fn push_line(s: &mut String, line: &str) {
     s.push_str(line);
     s.push('\n');
-}
-
-fn offset_len(offset: u32, len: u32) -> std::ops::Range<usize> {
-    if (offset as i32) < 0 {
-        return 0..0;
-    }
-    offset as usize..offset as usize + len as usize
 }
 
 struct FnDef<'a> {
@@ -119,14 +112,6 @@ fn find_method_with_rid(
     bail!("could not find method with rid {}", rid);
 }
 
-fn method_params(metadata: &Metadata, method: &Il2CppMethodDefinition) -> Vec<u32> {
-    let range = offset_len(method.parameter_start, method.parameter_count as u32);
-    metadata.parameters[range]
-        .iter()
-        .map(|p| p.type_index as u32)
-        .collect()
-}
-
 fn process_other(
     usages: &HashSet<String>,
     mod_id: &str,
@@ -145,10 +130,7 @@ fn process_other(
             .position(|n| n == &Some(cpp_name))
             .context("could not find method in module")? as u32;
         let method_idx = find_method_with_rid(data_builder.metadata, image, method_rid)?;
-        let method = &data_builder.metadata.methods[method_idx];
-        let name = get_str(data_builder.metadata.string, method.name_index as usize)?;
-        let params = method_params(data_builder.metadata, method);
-        data_builder.add_method(name, method.declaring_type, &params, method.return_type)
+        data_builder.add_method(method_idx as u32)
     };
 
     while let Some(line) = lines.next() {
@@ -198,6 +180,11 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mono_path = unity_path.join("Editor/Data/MonoBleedingEdge/bin/mono");
     let il2cpp_path = unity_path.join("Editor/Data/il2cpp/build/deploy/net471/il2cpp.exe");
 
+    let cpp_path = Path::new("./build/cpp");
+    let transformed_path = Path::new("./build/transformed");
+    fs::create_dir_all(cpp_path)?;
+    fs::create_dir_all(transformed_path)?;
+
     if regen_cpp {
         Command::new(mono_path)
             // Fix for System.ConsoleDriver type initializer
@@ -228,12 +215,10 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     //     }
     // }
 
-    let cpp_path = Path::new("./build/cpp");
-    let transformed_path = Path::new("./build/transformed");
-
     let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
     let types = type_definitions::parse(&types_src)?;
     let mut data_builder = ModDataBuilder::new(&metadata, &types);
+    data_builder.add_mod_definitions(&mod_config.id)?;
 
     let mut usages = HashSet::new();
 
@@ -296,7 +281,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         }
     }
 
-    dbg!(data_builder.build());
+    dbg!(data_builder.build()?);
 
     Ok(())
 }
