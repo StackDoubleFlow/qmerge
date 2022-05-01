@@ -117,7 +117,6 @@ fn process_other(
 ) -> Result<String> {
     let mut lines = src.lines().peekable();
     let mut new_src = String::new();
-    let mut includes = Vec::new();
 
     let mut add_method = |cpp_name: &str| -> Result<usize> {
         let method_rid = module
@@ -149,18 +148,16 @@ fn process_other(
                 writeln!(&mut new_src, "{{")?;
                 writeln!(
                     &mut new_src,
-                    "    return (({} (*){})(merge_get_method(\"{}\", {})))({});",
+                    "    return (({} (*){})(Merge::ResolveMethod(\"{}\", {})))({});",
                     fn_def.return_ty, fn_def.params, mod_id, idx, params
                 )?;
                 writeln!(&mut new_src, "}}")?;
             }
-        } else if line.starts_with("#include") {
-            includes.push(line);
         }
     }
 
     if !new_src.is_empty() {
-        new_src.insert_str(0, &(includes.join("\n") + "\n"));
+        new_src.insert_str(0, "#include \"merge_codegen/il2cpp-codegen.h\"\n");
     }
 
     Ok(new_src)
