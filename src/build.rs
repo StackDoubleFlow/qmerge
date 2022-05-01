@@ -12,11 +12,6 @@ use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
 
-fn push_line(s: &mut String, line: &str) {
-    s.push_str(line);
-    s.push('\n');
-}
-
 struct FnDef<'a> {
     return_ty: &'a str,
     name: &'a str,
@@ -122,6 +117,7 @@ fn process_other(
 ) -> Result<String> {
     let mut lines = src.lines().peekable();
     let mut new_src = String::new();
+    let mut includes = Vec::new();
 
     let mut add_method = |cpp_name: &str| -> Result<usize> {
         let method_rid = module
@@ -137,7 +133,7 @@ fn process_other(
         // Copy over function definitions and replace body with merge stub
         if let Some(fn_def) = FnDef::try_parse(line) {
             if *lines.peek().unwrap() == "{" && usages.contains(fn_def.name) {
-                push_line(&mut new_src, line);
+                writeln!(&mut new_src, "\n{}", line)?;
                 let idx = add_method(fn_def.name)?;
                 let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
                 let params: Vec<String> = params
@@ -159,8 +155,12 @@ fn process_other(
                 writeln!(&mut new_src, "}}")?;
             }
         } else if line.starts_with("#include") {
-            push_line(&mut new_src, line);
+            includes.push(line);
         }
+    }
+
+    if !new_src.is_empty() {
+        new_src.insert_str(0, &(includes.join("\n") + "\n"));
     }
 
     Ok(new_src)
@@ -197,6 +197,9 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             .context("il2cpp command failed")?;
     }
 
+    let main_code_gen = format!("{}_CodeGen.c", mod_config.id);
+    fs::copy(cpp_path.join(&main_code_gen), transformed_path.join(&main_code_gen)).context("error copying main CodeGen.c")?;
+
     let metadata_data = fs::read("./build/cpp/Data/Metadata/global-metadata.dat")
         .context("failed to read generated metadata")?;
     let metadata = il2cpp_metadata_raw::deserialize(&metadata_data)
@@ -228,9 +231,10 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         } else {
             format!("{}.cpp", mod_config.id)
         };
-        let path = cpp_path.join(path);
-        if path.exists() {
-            let main_source = fs::read_to_string(path)?;
+        let src_path = cpp_path.join(&path);
+        if src_path.exists() {
+            fs::copy(&src_path, transformed_path.join(&path))?;
+            let main_source = fs::read_to_string(src_path)?;
             let mut lines = main_source.lines().peekable();
             while let Some(line) = lines.next() {
                 if (line.starts_with("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR")
@@ -270,10 +274,12 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                         &module,
                         &mut data_builder,
                     )?;
-                    let new_path = transformed_path.join(path);
-                    fs::write(&new_path, new_src).with_context(|| {
-                        format!("error writing transformed source to {}", new_path.display())
-                    })?;
+                    if !new_src.is_empty() {
+                        let new_path = transformed_path.join(path);
+                        fs::write(&new_path, new_src).with_context(|| {
+                            format!("error writing transformed source to {}", new_path.display())
+                        })?;
+                    }
                 } else {
                     break;
                 }
