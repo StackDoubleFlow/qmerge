@@ -1,6 +1,6 @@
-use std::lazy::SyncLazy;
 use serde::Deserialize;
 use std::fs;
+use std::lazy::SyncLazy;
 
 use crate::get_mod_data_path;
 
@@ -22,7 +22,11 @@ pub struct XRefData {
 }
 
 pub fn get_symbol(name: String) -> u64 {
-    let symbol_trace = XREF_DATA.traces.iter().find(|st| st.symbol == name).unwrap();
+    let symbol_trace = XREF_DATA
+        .traces
+        .iter()
+        .find(|st| st.symbol == name)
+        .unwrap();
 
     todo!();
 }

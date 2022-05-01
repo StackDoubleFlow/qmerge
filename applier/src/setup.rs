@@ -4,8 +4,12 @@ use std::backtrace::Backtrace;
 use std::panic::PanicInfo;
 
 use cfg_if::cfg_if;
+use paranoid_android::Buffer;
 use tracing::error;
 use tracing_error::SpanTrace;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Registry;
 
 /// Sets up Android logging with the provided tag and default settings using
 /// [`tracing`]. Also sets up panic handling with backtrace and spantrace
@@ -14,7 +18,7 @@ use tracing_error::SpanTrace;
 pub fn setup(tag: impl ToString) {
     cfg_if! {
         if #[cfg(target_os = "android")] {
-            paranoid_android::init(tag);
+            Registry::default().with(paranoid_android::with_buffer(tag, Buffer::Main)).init();
         } else {
             let env = format!("LOG_{}", tag.to_string().to_ascii_uppercase());
             let filter = tracing_subscriber::filter::EnvFilter::from_env(env);
