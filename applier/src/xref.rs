@@ -1,8 +1,8 @@
+use anyhow::Result;
 use dlopen::raw::Library;
 use serde::Deserialize;
 use std::fs;
 use std::lazy::SyncLazy;
-use anyhow::Result;
 use tracing::debug;
 
 use crate::get_mod_data_path;
@@ -31,7 +31,7 @@ pub fn get_symbol(name: &str) -> Result<u64> {
         .iter()
         .find(|st| st.symbol == name)
         .unwrap();
-    
+
     let lib = Library::open("libil2cpp.so")?;
     debug!("{:?}", lib);
 

@@ -197,7 +197,11 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     }
 
     let main_code_gen = format!("{}_CodeGen.c", mod_config.id);
-    fs::copy(cpp_path.join(&main_code_gen), transformed_path.join(&main_code_gen)).context("error copying main CodeGen.c")?;
+    fs::copy(
+        cpp_path.join(&main_code_gen),
+        transformed_path.join(&main_code_gen),
+    )
+    .context("error copying main CodeGen.c")?;
 
     let metadata_data = fs::read("./build/cpp/Data/Metadata/global-metadata.dat")
         .context("failed to read generated metadata")?;

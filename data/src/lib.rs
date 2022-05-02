@@ -119,8 +119,8 @@ pub struct AddedTypeDefinition {
     pub byval_type: TypeDescriptionIdx,
     pub byref_type: TypeDescriptionIdx,
 
-    pub declaring_type: TypeDescriptionIdx,
-    pub parent_type: TypeDescriptionIdx,
+    pub declaring_type: Option<TypeDescriptionIdx>,
+    pub parent_type: Option<TypeDescriptionIdx>,
     pub element_type: TypeDescriptionIdx,
 
     // TODO: generics

@@ -1,8 +1,7 @@
 use crate::type_definitions::{Il2CppType, Il2CppTypeData};
 use anyhow::{bail, Context, Result};
 use il2cpp_metadata_raw::{
-    Il2CppAssemblyDefinition, Il2CppMethodDefinition, Il2CppTypeDefinition,
-    Metadata,
+    Il2CppAssemblyDefinition, Il2CppMethodDefinition, Il2CppTypeDefinition, Metadata,
 };
 use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedImage, AddedMethod, AddedParameter, AddedProperty,
@@ -189,11 +188,11 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             name: self.get_str(ty_def.name_index)?.to_string(),
             namespace: self.get_str(ty_def.namespace_index)?.to_string(),
             byval_type: self.add_type(ty_def.byval_type_index)?,
-            byref_type: self.add_type(ty_def.byval_type_index)?,
+            byref_type: self.add_type(ty_def.byref_type_index)?,
 
-            declaring_type: self.add_type(ty_def.byval_type_index)?,
-            parent_type: self.add_type(ty_def.byval_type_index)?,
-            element_type: self.add_type(ty_def.byval_type_index)?,
+            declaring_type: self.add_type_optional(ty_def.declaring_type_index)?,
+            parent_type: self.add_type_optional(ty_def.parent_index)?,
+            element_type: self.add_type(ty_def.element_type_index)?,
 
             flags: ty_def.flags,
 
@@ -277,13 +276,23 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(desc_idx)
     }
 
+    fn add_type_optional(&mut self, idx: u32) -> Result<Option<usize>> {
+        Ok(if idx as i32 == -1 {
+            None
+        } else {
+            Some(self.add_type(idx)?)
+        })
+    }
+
     fn add_type(&mut self, idx: u32) -> Result<usize> {
         if self.type_map.contains_key(&idx) {
             return Ok(self.type_map[&idx]);
         }
         let ty = &self.types[idx as usize];
         let data = match ty.data {
-            Il2CppTypeData::TypeDefIdx(idx) => TypeDescriptionData::TypeDefIdx(self.add_type_def(idx as u32)?),
+            Il2CppTypeData::TypeDefIdx(idx) => {
+                TypeDescriptionData::TypeDefIdx(self.add_type_def(idx as u32)?)
+            }
             _ => panic!("unsupported type: {:?}", ty),
         };
 

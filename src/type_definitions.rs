@@ -109,7 +109,7 @@ pub enum Il2CppTypeData<'src> {
     /// for ARRAY
     Il2CppArrayType(&'src str),
     /// for GENERICINST
-    Il2CppGenericClass(&'src str)
+    Il2CppGenericClass(&'src str),
 }
 
 #[derive(Debug)]
@@ -132,10 +132,18 @@ pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
             let byref = words[9].trim_end_matches(',').parse::<u8>()? != 0;
 
             let data = match ty {
-                Il2CppTypeEnum::Var | Il2CppTypeEnum::Mvar => Il2CppTypeData::GenericParamIdx(data.parse()?),
-                Il2CppTypeEnum::Ptr | Il2CppTypeEnum::Szarray => Il2CppTypeData::Il2CppType(data.trim_start_matches('&')),
-                Il2CppTypeEnum::Array => Il2CppTypeData::Il2CppArrayType(data.trim_start_matches('&')),
-                Il2CppTypeEnum::Genericinst => Il2CppTypeData::Il2CppGenericClass(data.trim_start_matches('&')),
+                Il2CppTypeEnum::Var | Il2CppTypeEnum::Mvar => {
+                    Il2CppTypeData::GenericParamIdx(data.parse()?)
+                }
+                Il2CppTypeEnum::Ptr | Il2CppTypeEnum::Szarray => {
+                    Il2CppTypeData::Il2CppType(data.trim_start_matches('&'))
+                }
+                Il2CppTypeEnum::Array => {
+                    Il2CppTypeData::Il2CppArrayType(data.trim_start_matches('&'))
+                }
+                Il2CppTypeEnum::Genericinst => {
+                    Il2CppTypeData::Il2CppGenericClass(data.trim_start_matches('&'))
+                }
                 _ => Il2CppTypeData::TypeDefIdx(data.parse()?),
             };
 
