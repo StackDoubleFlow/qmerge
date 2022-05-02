@@ -22,8 +22,10 @@ impl<'a> FnDef<'a> {
     fn try_parse(line: &'a str) -> Option<Self> {
         let line = if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
             line
+        } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR") {
+            line
         } else {
-            line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR")?
+            line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?
         };
 
         let param_start = line.find('(')?;
@@ -235,7 +237,8 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             let mut lines = main_source.lines().peekable();
             while let Some(line) = lines.next() {
                 if (line.starts_with("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR")
-                    || line.starts_with("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR"))
+                    || line.starts_with("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")
+                    || line.starts_with("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR"))
                     && *lines.peek().unwrap() == "{"
                 {
                     lines.next().unwrap();
