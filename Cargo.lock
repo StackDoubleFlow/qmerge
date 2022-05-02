@@ -441,6 +441,7 @@ dependencies = [
  "bad64",
  "cfg-if",
  "dlopen",
+ "il2cpp_metadata_raw",
  "merge_data",
  "paranoid-android",
  "serde",

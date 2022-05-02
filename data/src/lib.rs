@@ -19,6 +19,7 @@ pub enum TypeDescriptionData {
 pub struct TypeDescription {
     pub data: TypeDescriptionData,
     pub attrs: u16,
+    pub ty: u8,
     pub by_ref: bool,
 }
 
@@ -101,7 +102,7 @@ pub struct AddedProperty {
     pub token: u32,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone, Copy)]
 pub enum EncodedMethodIndex {
     Il2CppClass(TypeDefDescriptionIdx),
     Il2CppType(TypeDescriptionIdx),

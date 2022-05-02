@@ -1,5 +1,6 @@
 #![feature(once_cell, backtrace)]
 
+mod modloader;
 mod setup;
 mod xref;
 

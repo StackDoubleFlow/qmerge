@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 merge_data = { path = "../data" }
+il2cpp_metadata_raw = { path = "../../../brocolib/il2cpp_metadata_raw" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bad64 = "0.6"

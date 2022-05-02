@@ -300,6 +300,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let desc = TypeDescription {
             data,
             attrs: ty.attrs,
+            ty: ty.ty.get_id(),
             by_ref: ty.byref,
         };
         self.added_types.push(desc);

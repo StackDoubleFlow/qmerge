@@ -32,8 +32,8 @@ pub enum Il2CppTypeEnum {
 }
 
 impl Il2CppTypeEnum {
-    pub fn get_id(self) -> Result<u8> {
-        let ty_enum = match self {
+    pub fn get_id(self) -> u8 {
+        match self {
             Il2CppTypeEnum::Void => 0x01,
             Il2CppTypeEnum::Boolean => 0x02,
             Il2CppTypeEnum::Char => 0x03,
@@ -60,8 +60,7 @@ impl Il2CppTypeEnum {
             Il2CppTypeEnum::Object => 0x1c,
             Il2CppTypeEnum::Szarray => 0x1d,
             Il2CppTypeEnum::Mvar => 0x1e,
-        };
-        Ok(ty_enum)
+        }
     }
 
     fn from_name(name: &str) -> Result<Il2CppTypeEnum> {
