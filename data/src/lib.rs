@@ -1,3 +1,4 @@
+use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 
 type TypeDescriptionIdx = usize;
@@ -152,4 +153,15 @@ pub struct MergeModData {
     pub added_assembly: AddedAssembly,
     pub added_image: AddedImage,
     pub added_type_defintions: Vec<AddedTypeDefinition>,
+}
+
+impl MergeModData {
+    pub fn serialize(self) -> Result<Vec<u8>, EncodeError> {
+        // TODO: use encode_into_std_write
+        bincode::encode_to_vec(self, bincode::config::standard())
+    }
+
+    pub fn deserialize(data: &[u8]) -> Result<MergeModData, DecodeError> {
+        bincode::decode_from_slice(data, bincode::config::standard()).map(|(data, _)| data)
+    }
 }

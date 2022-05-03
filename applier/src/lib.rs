@@ -4,10 +4,11 @@ mod modloader;
 mod setup;
 mod xref;
 
-use std::{path::PathBuf, lazy::SyncLazy};
-use tracing::info;
 use inline_hook::Hook;
+use std::lazy::SyncLazy;
 use std::mem::transmute;
+use std::path::PathBuf;
+use tracing::info;
 
 fn get_mod_data_path() -> PathBuf {
     // TODO
@@ -17,7 +18,9 @@ fn get_mod_data_path() -> PathBuf {
 static LOAD_METADATA_HOOK: SyncLazy<Hook> = SyncLazy::new(|| {
     let addr = xref::get_symbol("_ZN6il2cpp2vm14MetadataLoader16LoadMetadataFileEPKc").unwrap();
     let hook = Hook::new();
-    unsafe { hook.install(addr as _, load_metadata as _); }
+    unsafe {
+        hook.install(addr as _, load_metadata as _);
+    }
     hook
 });
 pub extern "C" fn load_metadata(file_name: *const u8) -> *const () {

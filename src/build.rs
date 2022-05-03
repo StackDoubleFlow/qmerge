@@ -1,3 +1,4 @@
+use crate::clang::CompileCommand;
 use crate::config::{Mod, APPS, CONFIG};
 use crate::data::{get_str, offset_len, ModDataBuilder};
 use crate::modules::CodeGenModule;
@@ -11,6 +12,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
+
+const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
 
 struct FnDef<'a> {
     return_ty: &'a str,
@@ -150,7 +153,7 @@ fn process_other(
                 writeln!(&mut new_src, "{{")?;
                 writeln!(
                     &mut new_src,
-                    "    return (({} (*){})(Merge::ResolveMethod(\"{}\", {})))({});",
+                    "    return (({} (*){})(merge_resolve_method(\"{}\", {})))({});",
                     fn_def.return_ty, fn_def.params, mod_id, idx, params
                 )?;
                 writeln!(&mut new_src, "}}")?;
@@ -159,7 +162,8 @@ fn process_other(
     }
 
     if !new_src.is_empty() {
-        new_src.insert_str(0, "#include \"merge_codegen/il2cpp-codegen.h\"\n");
+        new_src.insert_str(0, "#include \"codegen/il2cpp-codegen.h\"\n");
+        new_src.insert_str(0, "#include \"merge/codegen.h\"\n");
     }
 
     Ok(new_src)
@@ -181,8 +185,18 @@ pub fn build(regen_cpp: bool) -> Result<()> {
 
     let cpp_path = Path::new("./build/cpp");
     let transformed_path = Path::new("./build/transformed");
+    let out_path = Path::new("./build/out");
     fs::create_dir_all(cpp_path)?;
     fs::create_dir_all(transformed_path)?;
+    fs::create_dir_all(out_path)?;
+
+    let include_path = Path::new("./build/include");
+    fs::create_dir_all(include_path.join("merge"))?;
+    fs::write(include_path.join("merge/codegen.h"), CODGEN_HEADER)?;
+
+    let mut compile_command = CompileCommand::new(out_path.join(format!("{}.so", mod_config.id)));
+    compile_command.add_include_path(unity_path.join("Editor/Data/il2cpp/libil2cpp"));
+    compile_command.add_include_path(include_path.into());
 
     if regen_cpp {
         Command::new(mono_path)
@@ -208,19 +222,6 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let metadata = il2cpp_metadata_raw::deserialize(&metadata_data)
         .context("failed to deserialize generated metadata")?;
 
-    // let using_types = HashSet::new();
-    // let image = metadata.images.iter().position(|image| get_str(metadata.string, image.name_index as usize).unwrap() == "test");
-    // for image in &metadata.images {
-    //     for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
-    //         for method in &metadata.methods[offset_len(type_def.method_start, type_def.method_count)] {
-    //             for param in &metadata.parameters[offset_len(method.parameter_start, method.parameter_count)] {
-    //                 using_types.insert(param.type_index);
-    //             }
-    //             using_types.insert(method.return_type);
-    //         }
-    //     }
-    // }
-
     let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
     let types = type_definitions::parse(&types_src)?;
     let mut data_builder = ModDataBuilder::new(&metadata, &types);
@@ -236,7 +237,9 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         };
         let src_path = cpp_path.join(&path);
         if src_path.exists() {
-            fs::copy(&src_path, transformed_path.join(&path))?;
+            let new_path = transformed_path.join(path);
+            fs::copy(&src_path, &new_path)?;
+            compile_command.add_source(new_path);
             let main_source = fs::read_to_string(src_path)?;
             let mut lines = main_source.lines().peekable();
             while let Some(line) = lines.next() {
@@ -283,6 +286,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                         fs::write(&new_path, new_src).with_context(|| {
                             format!("error writing transformed source to {}", new_path.display())
                         })?;
+                        compile_command.add_source(new_path);
                     }
                 } else {
                     break;
@@ -291,7 +295,13 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         }
     }
 
-    dbg!(data_builder.build()?);
+    let mod_data = dbg!(data_builder.build()?);
+
+    fs::write(
+        out_path.join(format!("{}.mmd", mod_config.id)),
+        mod_data.serialize()?,
+    )?;
+    compile_command.run()?;
 
     Ok(())
 }
