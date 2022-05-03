@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::build;
+use crate::{build, upload};
 
 #[derive(Parser)]
 #[clap(version)]
@@ -26,7 +26,7 @@ pub fn run() -> Result<()> {
 
     match cli.command {
         Commands::Build { regen_cpp } => build::build(regen_cpp)?,
-        Commands::Upload => todo!(),
+        Commands::Upload => upload::upload()?,
     }
 
     Ok(())

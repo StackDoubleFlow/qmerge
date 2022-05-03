@@ -73,4 +73,5 @@ pub struct Config {
     /// A mapping from untiy versions to their install paths
     pub unity_installs: HashMap<String, String>,
     pub ndk_path: String,
+    pub adb_path: String,
 }
