@@ -119,6 +119,7 @@ pub struct Il2CppType<'src> {
     pub byref: bool,
 }
 
+/// Parse Il2CppTypeDefinitions.c
 pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
     let mut types = HashMap::new();
     for line in src.lines() {

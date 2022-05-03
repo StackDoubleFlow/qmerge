@@ -1,10 +1,14 @@
-use crate::clang::CompileCommand;
+mod clang;
+mod data;
+mod modules;
+mod type_definitions;
+
 use crate::config::{Mod, APPS, CONFIG};
-use crate::data::{get_str, offset_len, ModDataBuilder};
-use crate::modules::CodeGenModule;
-use crate::{modules, type_definitions};
 use anyhow::{bail, Context, Result};
+use clang::CompileCommand;
+use data::{get_str, offset_len, ModDataBuilder};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
+use modules::CodeGenModule;
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::iter::Peekable;

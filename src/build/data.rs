@@ -1,4 +1,4 @@
-use crate::type_definitions::{Il2CppType, Il2CppTypeData};
+use super::type_definitions::{Il2CppType, Il2CppTypeData};
 use anyhow::{bail, Context, Result};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppMethodDefinition, Il2CppTypeDefinition, Metadata,

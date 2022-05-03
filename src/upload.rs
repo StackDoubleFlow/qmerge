@@ -11,7 +11,7 @@ fn ensure_dir_exists(dir: &str) -> Result<()> {
     if status.success() {
         Ok(())
     } else {
-        Err(anyhow!("adb upload failed"))
+        Err(anyhow!("adb mkdir failed"))
     }
 }
 
