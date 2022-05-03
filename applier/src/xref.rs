@@ -8,9 +8,10 @@ use tracing::{debug, info};
 
 use crate::get_mod_data_path;
 
+static LIBIL2CPP: SyncLazy<Library> = SyncLazy::new(|| Library::open("libil2cpp.so").unwrap());
+
 static XREF_DATA: SyncLazy<XRefData> = SyncLazy::new(|| {
     let path = get_mod_data_path().join("xref_gen.json");
-    debug!("{:?}", &path);
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 });
 
@@ -32,16 +33,14 @@ unsafe fn load_ins(addr: *const u32) -> Result<Instruction> {
         .map_err(|err| anyhow!("decode error during xref walk: {}", err))
 }
 
-pub fn get_symbol(name: &str) -> Result<u64> {
+pub fn get_symbol(name: &str) -> Result<*const ()> {
     let symbol_trace = XREF_DATA
         .traces
         .iter()
         .find(|st| st.symbol == name)
         .unwrap();
-    info!("{:?}", &symbol_trace);
 
-    let lib = Library::open("libil2cpp.so")?;
-    let start: *const u32 = unsafe { lib.symbol(&symbol_trace.start)? };
+    let start: *const u32 = unsafe { LIBIL2CPP.symbol(&symbol_trace.start)? };
 
     let nums = symbol_trace
         .trace
@@ -59,10 +58,8 @@ pub fn get_symbol(name: &str) -> Result<u64> {
         let mut count = 0;
         loop {
             let ins = unsafe { load_ins(addr)? };
-            info!("looking for {}, {:?}: {}", op, addr, ins);
             match ins.op() {
                 Op::BL if op == 'L' => {
-                    info!("count: {}", count);
                     if count == num {
                         let to = match ins.operands()[0] {
                             Operand::Label(Imm::Unsigned(to)) => to,
