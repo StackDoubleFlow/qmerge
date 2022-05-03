@@ -153,7 +153,7 @@ fn process_other(
                 writeln!(&mut new_src, "{{")?;
                 writeln!(
                     &mut new_src,
-                    "    return (({} (*){})(merge_resolve_method(\"{}\", {})))({});",
+                    "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
                     fn_def.return_ty, fn_def.params, mod_id, idx, params
                 )?;
                 writeln!(&mut new_src, "}}")?;
