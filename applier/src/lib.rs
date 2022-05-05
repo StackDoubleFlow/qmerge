@@ -3,6 +3,8 @@
 mod modloader;
 mod setup;
 mod xref;
+mod codegen_api;
+mod types;
 
 use inline_hook::Hook;
 use std::lazy::SyncLazy;

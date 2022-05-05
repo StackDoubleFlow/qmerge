@@ -11,6 +11,8 @@ use std::lazy::SyncLazy;
 use std::str;
 use std::sync::Mutex;
 
+use crate::types::Il2CppType;
+
 static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
 
 pub fn offset_len(offset: u32, len: u32) -> std::ops::Range<usize> {
@@ -32,17 +34,6 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
     let len = strlen(data, offset);
     let str = str::from_utf8(&data[offset..offset + len])?;
     Ok(str)
-}
-
-#[derive(PartialEq, Eq)]
-pub struct Il2CppType {
-    data: usize,
-    attrs: u16,
-    ty: u8,
-    // unused in practice
-    // num_mods: u8
-    byref: bool,
-    pinned: bool,
 }
 
 pub struct Mod {
@@ -131,6 +122,7 @@ impl<'md> ModLoader<'md> {
                 },
                 attrs: ty.attrs,
                 ty: ty.ty,
+                num_mods: 0,
                 byref: ty.by_ref,
                 // TODO: pinned types
                 pinned: false,

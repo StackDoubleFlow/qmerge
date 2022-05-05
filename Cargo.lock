@@ -505,6 +505,7 @@ dependencies = [
  "anyhow",
  "bad64",
  "cfg-if",
+ "deku",
  "dlopen",
  "il2cpp_metadata_raw",
  "inline_hook",
