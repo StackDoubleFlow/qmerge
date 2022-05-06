@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 merge_data = { path = "../data" }
-il2cpp_metadata_raw = { path = "../../../brocolib/il2cpp_metadata_raw" }
+il2cpp_metadata_raw = { git = "https://github.com/StackDoubleFlow/brocolib.git" }
 inline_hook = { git = "https://github.com/StackDoubleFlow/quest-hook-rs.git" }
 deku = "0.13"
 serde = { version = "1", features = ["derive"] }
