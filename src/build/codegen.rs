@@ -51,7 +51,9 @@ pub fn transform(
         }
     }
 
-    fs::write(transformed_path.join(&file_name), new_src)?;
+    let new_path = transformed_path.join(&file_name);
+    fs::write(&new_path, new_src)?;
+    compile_command.add_source(new_path);
     transform_invoker_table(
         compile_command,
         cpp_path,
@@ -121,7 +123,9 @@ fn transform_invoker_table(
         }
     }
 
-    fs::write(transformed_path.join("Il2CppInvokerTable.cpp"), new_src)?;
+    let new_path = transformed_path.join("Il2CppInvokerTable.cpp");
+    fs::write(&new_path, new_src)?;
+    compile_command.add_source(new_path);
 
     Ok(())
 }
