@@ -141,7 +141,7 @@ fn process_other(
         // Copy over function definitions and replace body with merge stub
         if let Some(fn_def) = FnDef::try_parse(line) {
             if *lines.peek().unwrap() == "{" && usages.contains(fn_def.name) {
-                writeln!(&mut new_src, "\n{}", line)?;
+                writeln!(new_src, "\n{}", line)?;
                 let idx = add_method(fn_def.name)?;
                 let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
                 let params: Vec<String> = params
@@ -154,13 +154,13 @@ fn process_other(
                     .collect();
                 let params = params.join(", ");
 
-                writeln!(&mut new_src, "{{")?;
+                writeln!(new_src, "{{")?;
                 writeln!(
-                    &mut new_src,
+                    new_src,
                     "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
                     fn_def.return_ty, fn_def.params, mod_id, idx, params
                 )?;
-                writeln!(&mut new_src, "}}")?;
+                writeln!(new_src, "}}")?;
             }
         }
     }
