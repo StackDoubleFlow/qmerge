@@ -38,24 +38,24 @@ impl CompileCommand {
     pub fn run(&self) -> Result<()> {
         let mut clang_path = PathBuf::from(&CONFIG.ndk_path).join("toolchains/llvm/prebuilt");
         clang_path.push(NDK_HOST_TAG);
-        clang_path.push("bin/clang++");
+        clang_path.push("bin/clang-12");
         #[cfg(target_os = "windows")]
         clang_path.set_extension(".exe");
 
         let target = "aarch64-linux-android21";
 
         let mut command = Command::new(clang_path);
+        for path in &self.include_paths {
+            command.arg("-I");
+            command.arg(path);
+        }
         command
             .args(&["-target", target])
             .args(&["-shared"])
             .arg("-o")
             .arg(&self.output_path)
             .args(&self.source_files);
-        for path in &self.include_paths {
-            command.arg("-I");
-            command.arg(path);
-        }
-
+        dbg!(&command);
         let status = command
             .status()
             .context("failed to execute compile command")?;
