@@ -116,7 +116,7 @@ fn transform_invoker_table(
             for &idx in &required_invokers {
                 writeln!(new_src, "    {},", invokers[idx])?;
             }
-            writeln!(new_src, "}}")?;
+            writeln!(new_src, "}};")?;
             break;
         } else {
             writeln!(new_src, "{}", line)?;
