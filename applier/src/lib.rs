@@ -1,10 +1,10 @@
 #![feature(once_cell, backtrace)]
 
+mod codegen_api;
 mod modloader;
 mod setup;
-mod xref;
-mod codegen_api;
 mod types;
+mod xref;
 
 use inline_hook::Hook;
 use std::lazy::SyncLazy;

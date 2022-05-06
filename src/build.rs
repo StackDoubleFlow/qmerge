@@ -1,4 +1,5 @@
 mod clang;
+mod codegen;
 mod data;
 mod modules;
 mod type_definitions;
@@ -214,12 +215,13 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             .context("il2cpp command failed")?;
     }
 
-    let main_code_gen = format!("{}_CodeGen.c", mod_config.id);
-    fs::copy(
-        cpp_path.join(&main_code_gen),
-        transformed_path.join(&main_code_gen),
+    codegen::transform(
+        &mut compile_command,
+        cpp_path,
+        transformed_path,
+        &mod_config.id,
     )
-    .context("error copying main CodeGen.c")?;
+    .context("error transforming codegen")?;
 
     let metadata_data = fs::read("./build/cpp/Data/Metadata/global-metadata.dat")
         .context("failed to read generated metadata")?;
