@@ -57,7 +57,7 @@ These are some of people and their repositories that have been a tremendous help
 
 - [djkaty](https://github.com/djkaty) - [Il2CppInspector](https://github.com/djkaty/Il2CppInspector)
 - [zoller27osu](https://github.com/zoller27osu), [sc2ad](https://github.com/sc2ad) and [jakibaki](https://github.com/jakibaki) - [beatsaber-hook](https://github.com/sc2ad/beatsaber-hook)
-- [sc2ad](https://github.com/sc2ad) and [https://github.com/nike4613](nike4613) - [QuestLoader](https://github.com/sc2ad/QuestLoader)
+- [sc2ad](https://github.com/sc2ad) and [nike4613](https://github.com/nike4613) - [QuestLoader](https://github.com/sc2ad/QuestLoader)
 - [StackDoubleFlow](https://github.com/StackDoubleFlow) and [raftario](https://github.com/raftario) - [quest-hook-rs](https://github.com/StackDoubleFlow/quest-hook-rs)
 - [raftario](https://github.com/raftario) - [paranoid-android](https://github.com/raftario/paranoid-android)
 - [StackDoubleFlow](https://github.com/StackDoubleFlow) - [brocolib](https://github.com/StackDoubleFlow/brocolib), [xref_gen](https://github.com/StackDoubleFlow/xref_gen), [Merge](https://github.com/StackDoubleFlow/Merge)
