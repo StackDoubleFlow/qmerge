@@ -28,6 +28,7 @@ pub fn transform(
     }
 
     let mut usage_map = HashMap::new();
+    // the indicies to add to the runtime metadataUsages table in order
     let mut usage_list = Vec::new();
     for idx in required_usage_ids {
         data_buider.add_metadata_usage_range(&mut usage_map, &mut usage_list, idx)?;

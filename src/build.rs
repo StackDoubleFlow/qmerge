@@ -192,7 +192,6 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let cpp_path = Path::new("./build/cpp");
     let transformed_path = Path::new("./build/transformed");
     let out_path = Path::new("./build/out");
-    fs::create_dir_all(cpp_path)?;
     fs::create_dir_all(transformed_path)?;
     fs::create_dir_all(out_path)?;
 
@@ -205,6 +204,10 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     compile_command.add_include_path(include_path.into());
 
     if regen_cpp {
+        if cpp_path.exists() {
+            fs::remove_dir_all(&cpp_path)?;
+        }
+        fs::create_dir_all(&cpp_path)?;
         Command::new(mono_path)
             // Fix for System.ConsoleDriver type initializer
             .env("TERM", "xterm")

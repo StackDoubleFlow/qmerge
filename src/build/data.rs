@@ -360,7 +360,6 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(new_idx)
     }
 
-    /// the indicies to add to the runtime metadataUsages table in order
     pub fn add_metadata_usage_range(
         &mut self,
         usage_map: &mut HashMap<u32, usize>,

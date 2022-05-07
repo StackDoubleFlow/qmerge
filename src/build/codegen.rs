@@ -35,7 +35,7 @@ pub fn transform(
                     break;
                 }
                 let num_str = line.trim().trim_end_matches(',');
-                if num_str == "NULL" {
+                if num_str == "-1" {
                     writeln!(new_src, "{}", line)?;
                     continue;
                 }
