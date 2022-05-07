@@ -4,6 +4,7 @@ use bincode::{Decode, Encode};
 type TypeDescriptionIdx = usize;
 type TypeDefDescriptionIdx = usize;
 type MethodDescriptionIdx = usize;
+type StringLiteralIdx = usize;
 
 #[derive(Encode, Decode, Debug)]
 pub struct TypeDefDescription {
@@ -108,6 +109,7 @@ pub enum EncodedMethodIndex {
     Il2CppClass(TypeDefDescriptionIdx),
     Il2CppType(TypeDescriptionIdx),
     MethodInfo(MethodDescriptionIdx),
+    StringLiteral(StringLiteralIdx),
     // TODO:
     // FieldInfo
     // StringLiteral
@@ -143,6 +145,12 @@ pub struct AddedTypeDefinition {
 }
 
 #[derive(Encode, Decode, Debug)]
+pub struct AddedMetadataUsagePair {
+    pub source: EncodedMethodIndex,
+    pub dest: usize,
+}
+
+#[derive(Encode, Decode, Debug)]
 pub struct MergeModData {
     // Linkage information
     pub type_def_descriptions: Vec<TypeDefDescription>,
@@ -153,6 +161,8 @@ pub struct MergeModData {
     pub added_assembly: AddedAssembly,
     pub added_image: AddedImage,
     pub added_type_defintions: Vec<AddedTypeDefinition>,
+    pub added_usage_lists: Vec<Vec<AddedMetadataUsagePair>>,
+    pub added_string_literals: Vec<String>,
 }
 
 impl MergeModData {

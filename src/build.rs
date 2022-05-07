@@ -1,6 +1,7 @@
 mod clang;
 mod codegen;
 mod data;
+mod metadata_usage;
 mod modules;
 mod type_definitions;
 
@@ -234,6 +235,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     data_builder.add_mod_definitions(&mod_config.id)?;
 
     let mut usages = HashSet::new();
+    let mut mod_functions = HashSet::new();
 
     for i in 0.. {
         let path = if i > 0 {
@@ -249,19 +251,26 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             let main_source = fs::read_to_string(src_path)?;
             let mut lines = main_source.lines().peekable();
             while let Some(line) = lines.next() {
-                if (line.starts_with("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR")
-                    || line.starts_with("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")
-                    || line.starts_with("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR"))
-                    && *lines.peek().unwrap() == "{"
-                {
-                    lines.next().unwrap();
-                    get_function_usages(&mut usages, &mut lines);
+                if let Some(fn_def) = FnDef::try_parse(line) {
+                    if *lines.peek().unwrap() == "{" {
+                        lines.next().unwrap();
+                        mod_functions.insert(fn_def.name.to_owned());
+                        get_function_usages(&mut usages, &mut lines);
+                    }
                 }
             }
         } else {
             break;
         }
     }
+
+    metadata_usage::transform(
+        &mut compile_command,
+        cpp_path,
+        transformed_path,
+        &mut data_builder,
+        mod_functions,
+    )?;
 
     for assembly in &metadata.assemblies {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;

@@ -4,9 +4,9 @@ use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppMethodDefinition, Il2CppTypeDefinition, Metadata,
 };
 use merge_data::{
-    AddedAssembly, AddedEvent, AddedField, AddedImage, AddedMethod, AddedParameter, AddedProperty,
-    AddedTypeDefinition, EncodedMethodIndex, MergeModData, MethodDescription, TypeDefDescription,
-    TypeDescription, TypeDescriptionData,
+    AddedAssembly, AddedEvent, AddedField, AddedImage, AddedMetadataUsagePair, AddedMethod,
+    AddedParameter, AddedProperty, AddedTypeDefinition, EncodedMethodIndex, MergeModData,
+    MethodDescription, TypeDefDescription, TypeDescription, TypeDescriptionData,
 };
 use std::collections::HashMap;
 use std::str;
@@ -73,6 +73,8 @@ pub struct ModDataBuilder<'md, 'ty> {
     method_def_map: HashMap<u32, usize>,
 
     mod_definitions: Option<ModDefinitions>,
+    added_usage_lists: Vec<Vec<AddedMetadataUsagePair>>,
+    added_string_literals: Vec<String>,
 }
 
 impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
@@ -87,6 +89,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             methods: Vec::new(),
             method_def_map: HashMap::new(),
             mod_definitions: None,
+            added_usage_lists: Vec::new(),
+            added_string_literals: Vec::new(),
         }
     }
 
@@ -165,14 +169,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let mut vtable = Vec::new();
         let vtable_range = offset_len(ty_def.vtable_start, ty_def.vtable_count as u32);
         for &encoded_idx in &self.metadata.vtable_methods[vtable_range] {
-            let ty = (encoded_idx & 0xE0000000) >> 29;
-            let idx = encoded_idx & 0x1FFFFFFF;
-            vtable.push(match ty {
-                1 => EncodedMethodIndex::Il2CppClass(self.add_type_def(idx)?),
-                2 => EncodedMethodIndex::Il2CppType(self.add_type(idx)?),
-                3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
-                _ => bail!("Unsupposed encoded method index with type {}", ty),
-            });
+            vtable.push(self.add_encoded(encoded_idx)?);
         }
 
         let mut interface_offsets = Vec::new();
@@ -347,6 +344,58 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             added_assembly,
             added_image,
             added_type_defintions,
+            added_usage_lists: self.added_usage_lists,
+            added_string_literals: self.added_string_literals,
+        })
+    }
+
+    fn add_string_literal(&mut self, idx: u32) -> Result<usize> {
+        let literal = &self.metadata.string_literal[idx as usize];
+        let data_range = offset_len(literal.data_index, literal.length);
+        let data = &self.metadata.string_literal_data[data_range];
+        let str = String::from_utf8(data.to_vec())
+            .context("error reading string literal data as utf8")?;
+        let new_idx = self.added_string_literals.len();
+        self.added_string_literals.push(str);
+        Ok(new_idx)
+    }
+
+    /// the indicies to add to the runtime metadataUsages table in order
+    pub fn add_metadata_usage_range(
+        &mut self,
+        usage_map: &mut HashMap<u32, usize>,
+        usage_list: &mut Vec<usize>,
+        idx: u32,
+    ) -> Result<()> {
+        let list = &self.metadata.metadata_usage_lists[idx as usize];
+
+        let mut new_list = Vec::new();
+        let usage_range = offset_len(list.start, list.count);
+        for pair in &self.metadata.metadata_usage_pairs[usage_range] {
+            let dest = *usage_map.entry(pair.destination_index).or_insert_with(|| {
+                let idx = usage_list.len();
+                usage_list.push(pair.destination_index as usize);
+                idx
+            });
+            new_list.push(AddedMetadataUsagePair {
+                dest,
+                source: self.add_encoded(pair.encoded_source_index)?,
+            })
+        }
+        self.added_usage_lists.push(new_list);
+
+        Ok(())
+    }
+
+    fn add_encoded(&mut self, encoded_idx: u32) -> Result<EncodedMethodIndex> {
+        let ty = (encoded_idx & 0xE0000000) >> 29;
+        let idx = encoded_idx & 0x1FFFFFFF;
+        Ok(match ty {
+            1 => EncodedMethodIndex::Il2CppClass(self.add_type_def(idx)?),
+            2 => EncodedMethodIndex::Il2CppType(self.add_type(idx)?),
+            3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
+            5 => EncodedMethodIndex::StringLiteral(self.add_string_literal(idx)?),
+            _ => bail!("Unsupposed encoded method index with type {}", ty),
         })
     }
 }

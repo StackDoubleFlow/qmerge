@@ -11,6 +11,10 @@ namespace MergeExample
             return a * b;
         }
 
+        public string StringTest() {
+            return "Hello World";
+        }
+
         // public void Dummy() {
         //     TestGenerics<int>(1, 2);
         //     TestGenerics<double>(1.0, 2.0);
