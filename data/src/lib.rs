@@ -15,6 +15,8 @@ pub struct TypeDefDescription {
 #[derive(Encode, Decode, Debug)]
 pub enum TypeDescriptionData {
     TypeDefIdx(TypeDefDescriptionIdx),
+    // Adding the owner here could make this self referencial during link
+    GenericParam(u16),
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -77,8 +79,7 @@ pub struct AddedMethod {
     pub declaring_type: TypeDefDescriptionIdx,
     pub return_ty: TypeDescriptionIdx,
     pub parameters: Vec<AddedParameter>,
-    // TODO: Generics
-    // pub generic_container:
+    pub generic_container: Option<AddedGenericContainer>,
     pub token: u32,
     pub flags: u16,
     pub iflags: u16,
@@ -127,8 +128,8 @@ pub struct AddedTypeDefinition {
     pub parent_type: Option<TypeDescriptionIdx>,
     pub element_type: TypeDescriptionIdx,
 
-    // TODO: generics
-    // pub generic_container:
+    pub generic_container: Option<AddedGenericContainer>,
+
     pub flags: u32,
 
     pub fields: Vec<AddedField>,
@@ -148,6 +149,25 @@ pub struct AddedTypeDefinition {
 pub struct AddedMetadataUsagePair {
     pub source: EncodedMethodIndex,
     pub dest: usize,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub enum GenericContainerOwner {
+    Class(TypeDefDescriptionIdx),
+    Method(MethodDescriptionIdx),
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct AddedGenericParameter {
+    pub name: String,
+    pub constraints: Vec<TypeDescriptionIdx>,
+    pub flags: u16,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct AddedGenericContainer {
+    pub owner: GenericContainerOwner,
+    pub parameters: Vec<AddedGenericParameter>,
 }
 
 #[derive(Encode, Decode, Debug)]

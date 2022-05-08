@@ -1,11 +1,13 @@
 use super::type_definitions::{Il2CppType, Il2CppTypeData};
 use anyhow::{bail, Context, Result};
 use il2cpp_metadata_raw::{
-    Il2CppAssemblyDefinition, Il2CppMethodDefinition, Il2CppTypeDefinition, Metadata,
+    Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
+    Metadata,
 };
 use merge_data::{
-    AddedAssembly, AddedEvent, AddedField, AddedImage, AddedMetadataUsagePair, AddedMethod,
-    AddedParameter, AddedProperty, AddedTypeDefinition, EncodedMethodIndex, MergeModData,
+    AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
+    AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
+    AddedTypeDefinition, EncodedMethodIndex, GenericContainerOwner, MergeModData,
     MethodDescription, TypeDefDescription, TypeDescription, TypeDescriptionData,
 };
 use std::collections::HashMap;
@@ -51,6 +53,11 @@ fn method_params(metadata: &Metadata, method: &Il2CppMethodDefinition) -> Vec<u3
         .iter()
         .map(|p| p.type_index as u32)
         .collect()
+}
+
+struct GenericCtx {
+    type_container: u32,
+    method_container: Option<u32>,
 }
 
 struct ModDefinitions {
@@ -99,6 +106,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     }
 
     fn add_mod_method(&mut self, method_def: &Il2CppMethodDefinition) -> Result<AddedMethod> {
+        let ctx = GenericCtx {
+            type_container: self.metadata.type_definitions[method_def.declaring_type as usize].generic_container_index,
+            method_container: Some(method_def.generic_container_index),
+        };
         let mut parameters = Vec::new();
         let params_range = offset_len(
             method_def.parameter_start,
@@ -108,15 +119,16 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             parameters.push(AddedParameter {
                 name: self.get_str(param.name_index as u32)?.to_string(),
                 token: param.token,
-                ty: self.add_type(param.type_index as u32)?,
+                ty: self.add_type(param.type_index as u32, &ctx)?,
             })
         }
 
         Ok(AddedMethod {
             name: self.get_str(method_def.name_index as u32)?.to_string(),
             declaring_type: self.add_type_def(method_def.declaring_type)?,
-            return_ty: self.add_type(method_def.return_type)?,
+            return_ty: self.add_type(method_def.return_type, &ctx)?,
             parameters,
+            generic_container: self.add_generic_container(method_def.generic_container_index, &ctx)?,
             token: method_def.token,
             flags: method_def.flags,
             iflags: method_def.iflags,
@@ -125,13 +137,18 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     }
 
     fn add_mod_ty_def(&mut self, ty_def: &Il2CppTypeDefinition) -> Result<AddedTypeDefinition> {
+        let ctx = GenericCtx {
+            type_container: ty_def.generic_container_index,
+            method_container: None,
+        };
+
         let mut fields = Vec::new();
         let fields_range = offset_len(ty_def.field_start, ty_def.field_count as u32);
         for field in &self.metadata.fields[fields_range] {
             fields.push(AddedField {
                 name: self.get_str(field.name_index as u32)?.to_string(),
                 token: field.token,
-                ty: self.add_type(field.type_index as u32)?,
+                ty: self.add_type(field.type_index as u32, &ctx)?,
             });
         }
 
@@ -146,7 +163,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         for event in &self.metadata.events[events_range] {
             events.push(AddedEvent {
                 name: self.get_str(event.name_index as u32)?.to_string(),
-                ty: self.add_type(event.type_index as u32)?,
+                ty: self.add_type(event.type_index as u32, &ctx)?,
                 add: self.add_method(event.add)?,
                 remove: self.add_method(event.remove)?,
                 raise: self.add_method(event.raise)?,
@@ -169,7 +186,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let mut vtable = Vec::new();
         let vtable_range = offset_len(ty_def.vtable_start, ty_def.vtable_count as u32);
         for &encoded_idx in &self.metadata.vtable_methods[vtable_range] {
-            vtable.push(self.add_encoded(encoded_idx)?);
+            vtable.push(self.add_encoded(encoded_idx, &ctx)?);
         }
 
         let mut interface_offsets = Vec::new();
@@ -178,18 +195,20 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             ty_def.interface_offsets_count as u32,
         );
         for pair in &self.metadata.interface_offsets[interface_offsets_range] {
-            interface_offsets.push((self.add_type(pair.interface_type_index)?, pair.offset));
+            interface_offsets.push((self.add_type(pair.interface_type_index, &ctx)?, pair.offset));
         }
 
         Ok(AddedTypeDefinition {
             name: self.get_str(ty_def.name_index)?.to_string(),
             namespace: self.get_str(ty_def.namespace_index)?.to_string(),
-            byval_type: self.add_type(ty_def.byval_type_index)?,
-            byref_type: self.add_type(ty_def.byref_type_index)?,
+            byval_type: self.add_type(ty_def.byval_type_index, &ctx)?,
+            byref_type: self.add_type(ty_def.byref_type_index, &ctx)?,
 
-            declaring_type: self.add_type_optional(ty_def.declaring_type_index)?,
-            parent_type: self.add_type_optional(ty_def.parent_index)?,
-            element_type: self.add_type(ty_def.element_type_index)?,
+            declaring_type: self.add_type_optional(ty_def.declaring_type_index, &ctx)?,
+            parent_type: self.add_type_optional(ty_def.parent_index, &ctx)?,
+            element_type: self.add_type(ty_def.element_type_index, &ctx)?,
+
+            generic_container: self.add_generic_container(ty_def.generic_container_index, &ctx)?,
 
             flags: ty_def.flags,
 
@@ -205,7 +224,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             interfaces: self.metadata.interfaces
                 [offset_len(ty_def.interfaces_start, ty_def.interfaces_count as u32)]
             .iter()
-            .map(|&idx| self.add_type(idx))
+            .map(|&idx| self.add_type(idx, &ctx))
             .collect::<Result<Vec<usize>>>()?,
             vtable,
             interface_offsets,
@@ -273,15 +292,15 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(desc_idx)
     }
 
-    fn add_type_optional(&mut self, idx: u32) -> Result<Option<usize>> {
+    fn add_type_optional(&mut self, idx: u32, ctx: &GenericCtx) -> Result<Option<usize>> {
         Ok(if idx as i32 == -1 {
             None
         } else {
-            Some(self.add_type(idx)?)
+            Some(self.add_type(idx, ctx)?)
         })
     }
 
-    fn add_type(&mut self, idx: u32) -> Result<usize> {
+    fn add_type(&mut self, idx: u32, ctx: &GenericCtx) -> Result<usize> {
         if self.type_map.contains_key(&idx) {
             return Ok(self.type_map[&idx]);
         }
@@ -289,6 +308,12 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let data = match ty.data {
             Il2CppTypeData::TypeDefIdx(idx) => {
                 TypeDescriptionData::TypeDefIdx(self.add_type_def(idx as u32)?)
+            }
+            Il2CppTypeData::GenericParamIdx(idx) => {
+                let param = &self.metadata.generic_parameters[idx];
+                // TODO: This needs testing
+                // Can you always get the right generic param from just the num?
+                TypeDescriptionData::GenericParam(param.num)
             }
             _ => panic!("unsupported type: {:?}", ty),
         };
@@ -313,19 +338,62 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let method = &self.metadata.methods[idx as usize];
         let params = method_params(self.metadata, method);
 
+        let ctx = GenericCtx {
+            type_container: self.metadata.type_definitions[method.declaring_type as usize].generic_container_index,
+            method_container: Some(method.generic_container_index),
+        };
+
         let desc_idx = self.methods.len();
         let desc = MethodDescription {
             name: self.get_str(method.name_index)?.to_string(),
             defining_type: self.add_type_def(method.declaring_type)?,
             params: params
                 .iter()
-                .map(|idx| self.add_type(*idx))
+                .map(|idx| self.add_type(*idx, &ctx))
                 .collect::<Result<_>>()?,
-            return_ty: self.add_type(method.return_type)?,
+            return_ty: self.add_type(method.return_type, &ctx)?,
         };
         self.methods.push(desc);
         self.method_def_map.insert(idx, desc_idx);
         Ok(desc_idx)
+    }
+
+    fn add_gc_owner(&mut self, gc: &Il2CppGenericContainer) -> Result<GenericContainerOwner> {
+        Ok(if gc.is_method != 0 {
+            GenericContainerOwner::Method(self.add_method(gc.owner_index)?)
+        } else {
+            GenericContainerOwner::Class(self.add_type_def(gc.owner_index)?)
+        })
+    }
+
+    fn add_generic_container(&mut self, idx: u32, ctx: &GenericCtx) -> Result<Option<AddedGenericContainer>> {
+        if idx as i32 == -1 {
+            return Ok(None);
+        }
+
+        let gc = &self.metadata.generic_containers[idx as usize];
+        let owner = self.add_gc_owner(gc)?;
+        let mut params = Vec::new();
+        let params_range = offset_len(gc.generic_parameter_start, gc.type_argc);
+        for param in &self.metadata.generic_parameters[params_range] {
+            let mut constraints = Vec::new();
+            let constraints_range = offset_len(
+                param.constraints_start as u32,
+                param.constraints_count as u32,
+            );
+            for &constraint in &self.metadata.generic_parameter_constraints[constraints_range] {
+                constraints.push(self.add_type(constraint, ctx)?);
+            }
+            params.push(AddedGenericParameter {
+                name: self.get_str(param.name_index)?.to_string(),
+                constraints,
+                flags: param.flags,
+            });
+        }
+        Ok(Some(AddedGenericContainer {
+            owner,
+            parameters: params,
+        }))
     }
 
     pub fn build(self) -> Result<MergeModData> {
@@ -368,6 +436,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     ) -> Result<()> {
         let list = &self.metadata.metadata_usage_lists[idx as usize];
 
+        let ctx = GenericCtx { type_container: u32::MAX, method_container: None };
+
         let mut new_list = Vec::new();
         let usage_range = offset_len(list.start, list.count);
         for pair in &self.metadata.metadata_usage_pairs[usage_range] {
@@ -378,7 +448,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             });
             new_list.push(AddedMetadataUsagePair {
                 dest,
-                source: self.add_encoded(pair.encoded_source_index)?,
+                source: self.add_encoded(pair.encoded_source_index, &ctx)?,
             })
         }
         self.added_usage_lists.push(new_list);
@@ -386,15 +456,15 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(())
     }
 
-    fn add_encoded(&mut self, encoded_idx: u32) -> Result<EncodedMethodIndex> {
+    fn add_encoded(&mut self, encoded_idx: u32, ctx: &GenericCtx) -> Result<EncodedMethodIndex> {
         let ty = (encoded_idx & 0xE0000000) >> 29;
         let idx = encoded_idx & 0x1FFFFFFF;
         Ok(match ty {
             1 => EncodedMethodIndex::Il2CppClass(self.add_type_def(idx)?),
-            2 => EncodedMethodIndex::Il2CppType(self.add_type(idx)?),
-            3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
+            2 => EncodedMethodIndex::Il2CppType(self.add_type(idx, ctx)?),
+            3 | 6 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
             5 => EncodedMethodIndex::StringLiteral(self.add_string_literal(idx)?),
-            _ => bail!("Unsupposed encoded method index with type {}", ty),
+            _ => bail!("Unsupported encoded method index with type {}", ty),
         })
     }
 }
