@@ -1,5 +1,5 @@
-use super::type_definitions::{Il2CppType, Il2CppTypeData};
-use anyhow::{bail, Context, Result};
+use super::type_definitions::{Il2CppType, Il2CppTypeData, Il2CppTypeEnum};
+use anyhow::{bail, ensure, Context, Result};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
     Metadata,
@@ -107,7 +107,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
 
     fn add_mod_method(&mut self, method_def: &Il2CppMethodDefinition) -> Result<AddedMethod> {
         let ctx = GenericCtx {
-            type_container: self.metadata.type_definitions[method_def.declaring_type as usize].generic_container_index,
+            type_container: self.metadata.type_definitions[method_def.declaring_type as usize]
+                .generic_container_index,
             method_container: Some(method_def.generic_container_index),
         };
         let mut parameters = Vec::new();
@@ -128,7 +129,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             declaring_type: self.add_type_def(method_def.declaring_type)?,
             return_ty: self.add_type(method_def.return_type, &ctx)?,
             parameters,
-            generic_container: self.add_generic_container(method_def.generic_container_index, &ctx)?,
+            generic_container: self
+                .add_generic_container(method_def.generic_container_index, &ctx)?,
             token: method_def.token,
             flags: method_def.flags,
             iflags: method_def.iflags,
@@ -311,8 +313,19 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             }
             Il2CppTypeData::GenericParamIdx(idx) => {
                 let param = &self.metadata.generic_parameters[idx];
-                // TODO: This needs testing
-                // Can you always get the right generic param from just the num?
+                let gc_idx = match ty.ty {
+                    Il2CppTypeEnum::Var => ctx.type_container,
+                    Il2CppTypeEnum::Mvar => ctx
+                        .method_container
+                        .context("use of method generic paramater outside of method")?,
+                    _ => bail!(
+                        "Il2CppType has data type GenericParamIdx but is not a generic parameter"
+                    ),
+                };
+                ensure!(
+                    param.owner_index == gc_idx,
+                    "generic parameter used in incorrect context"
+                );
                 TypeDescriptionData::GenericParam(param.num)
             }
             _ => panic!("unsupported type: {:?}", ty),
@@ -339,7 +352,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let params = method_params(self.metadata, method);
 
         let ctx = GenericCtx {
-            type_container: self.metadata.type_definitions[method.declaring_type as usize].generic_container_index,
+            type_container: self.metadata.type_definitions[method.declaring_type as usize]
+                .generic_container_index,
             method_container: Some(method.generic_container_index),
         };
 
@@ -366,7 +380,11 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         })
     }
 
-    fn add_generic_container(&mut self, idx: u32, ctx: &GenericCtx) -> Result<Option<AddedGenericContainer>> {
+    fn add_generic_container(
+        &mut self,
+        idx: u32,
+        ctx: &GenericCtx,
+    ) -> Result<Option<AddedGenericContainer>> {
         if idx as i32 == -1 {
             return Ok(None);
         }
@@ -436,7 +454,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     ) -> Result<()> {
         let list = &self.metadata.metadata_usage_lists[idx as usize];
 
-        let ctx = GenericCtx { type_container: u32::MAX, method_container: None };
+        let ctx = GenericCtx {
+            type_container: u32::MAX,
+            method_container: None,
+        };
 
         let mut new_list = Vec::new();
         let usage_range = offset_len(list.start, list.count);
