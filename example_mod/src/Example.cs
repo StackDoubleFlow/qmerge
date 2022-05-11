@@ -3,6 +3,7 @@ namespace MergeExample
     public class Plugin
     {
         static T TestGenerics<T>(T a, T b) {
+            System.Type type = typeof(T);
             b = a;
             return a;
         }

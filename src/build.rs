@@ -1,6 +1,7 @@
 mod clang;
 mod codegen;
 mod data;
+mod generics;
 mod metadata_usage;
 mod modules;
 mod type_definitions;
@@ -118,6 +119,16 @@ fn find_method_with_rid(
     bail!("could not find method with rid {}", rid);
 }
 
+fn find_image<'md>(metadata: &'md Metadata, find_name: &str) -> Result<&'md Il2CppImageDefinition> {
+    for image in &metadata.images {
+        let name = get_str(metadata.string, image.name_index as usize)?;
+        if name == find_name {
+            return Ok(image);
+        }
+    }
+    bail!("could not find image: {}", find_name);
+}
+
 fn process_other(
     usages: &HashSet<String>,
     mod_id: &str,
@@ -219,23 +230,27 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             .context("il2cpp command failed")?;
     }
 
-    codegen::transform(
-        &mut compile_command,
-        cpp_path,
-        transformed_path,
-        &mod_config.id,
-    )
-    .context("error transforming codegen")?;
-
     let metadata_data = fs::read("./build/cpp/Data/Metadata/global-metadata.dat")
         .context("failed to read generated metadata")?;
     let metadata = il2cpp_metadata_raw::deserialize(&metadata_data)
         .context("failed to deserialize generated metadata")?;
+    let mod_image_name = format!("{}.dll", mod_config.id);
+    let mod_image = find_image(&metadata, &mod_image_name)?;
 
     let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
     let types = type_definitions::parse(&types_src)?;
     let mut data_builder = ModDataBuilder::new(&metadata, &types);
     data_builder.add_mod_definitions(&mod_config.id)?;
+
+    codegen::transform(
+        &mut compile_command,
+        &mut data_builder,
+        mod_image,
+        cpp_path,
+        transformed_path,
+        &mod_config.id,
+    )
+    .context("error transforming codegen")?;
 
     let mut usages = HashSet::new();
     let mut mod_functions = HashSet::new();

@@ -55,9 +55,19 @@ fn method_params(metadata: &Metadata, method: &Il2CppMethodDefinition) -> Vec<u3
         .collect()
 }
 
-struct GenericCtx {
+pub struct GenericCtx {
     type_container: u32,
     method_container: Option<u32>,
+}
+
+impl GenericCtx {
+    pub fn for_method(metadata: &Metadata, method: &Il2CppMethodDefinition) -> Self {
+        Self {
+            type_container: metadata.type_definitions[method.declaring_type as usize]
+                .generic_container_index,
+            method_container: Some(method.generic_container_index),
+        }
+    }
 }
 
 struct ModDefinitions {
@@ -106,11 +116,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     }
 
     fn add_mod_method(&mut self, method_def: &Il2CppMethodDefinition) -> Result<AddedMethod> {
-        let ctx = GenericCtx {
-            type_container: self.metadata.type_definitions[method_def.declaring_type as usize]
-                .generic_container_index,
-            method_container: Some(method_def.generic_container_index),
-        };
+        let ctx = GenericCtx::for_method(self.metadata, method_def);
         let mut parameters = Vec::new();
         let params_range = offset_len(
             method_def.parameter_start,
@@ -275,7 +281,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(())
     }
 
-    fn add_type_def(&mut self, idx: u32) -> Result<usize> {
+    pub fn add_type_def(&mut self, idx: u32) -> Result<usize> {
         if self.type_def_map.contains_key(&idx) {
             return Ok(self.type_def_map[&idx]);
         }
@@ -302,7 +308,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         })
     }
 
-    fn add_type(&mut self, idx: u32, ctx: &GenericCtx) -> Result<usize> {
+    pub fn add_type(&mut self, idx: u32, ctx: &GenericCtx) -> Result<usize> {
         if self.type_map.contains_key(&idx) {
             return Ok(self.type_map[&idx]);
         }
@@ -337,6 +343,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             attrs: ty.attrs,
             ty: ty.ty.get_id(),
             by_ref: ty.byref,
+            pinned: ty.pinned,
         };
         self.added_types.push(desc);
         self.type_map.insert(idx, desc_idx);
@@ -351,11 +358,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let method = &self.metadata.methods[idx as usize];
         let params = method_params(self.metadata, method);
 
-        let ctx = GenericCtx {
-            type_container: self.metadata.type_definitions[method.declaring_type as usize]
-                .generic_container_index,
-            method_container: Some(method.generic_container_index),
-        };
+        let ctx = GenericCtx::for_method(self.metadata, method);
 
         let desc_idx = self.methods.len();
         let desc = MethodDescription {
@@ -432,6 +435,11 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             added_type_defintions,
             added_usage_lists: self.added_usage_lists,
             added_string_literals: self.added_string_literals,
+
+            generic_instances: Vec::new(),    // TODO
+            generic_method_insts: Vec::new(), // TODO
+            generic_method_funcs: Vec::new(), // TODO
+            generic_class_insts: Vec::new(),  // TODO
         })
     }
 

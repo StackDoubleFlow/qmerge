@@ -117,6 +117,7 @@ pub struct Il2CppType<'src> {
     pub attrs: u16,
     pub ty: Il2CppTypeEnum,
     pub byref: bool,
+    pub pinned: bool,
 }
 
 /// Parse Il2CppTypeDefinitions.c
@@ -130,6 +131,7 @@ pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
             let attrs: u16 = words[6].trim_end_matches(',').parse()?;
             let ty = Il2CppTypeEnum::from_name(words[7].trim_end_matches(','))?;
             let byref = words[9].trim_end_matches(',').parse::<u8>()? != 0;
+            let pinned = words[10].parse::<u8>()? != 0;
 
             let data = match ty {
                 Il2CppTypeEnum::Var | Il2CppTypeEnum::Mvar => {
@@ -152,6 +154,7 @@ pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
                 attrs,
                 ty,
                 byref,
+                pinned,
             };
             types.insert(name, ty);
         }
