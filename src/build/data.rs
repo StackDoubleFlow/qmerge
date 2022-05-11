@@ -491,8 +491,9 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(match ty {
             1 => EncodedMethodIndex::Il2CppClass(self.add_type_def(idx)?),
             2 => EncodedMethodIndex::Il2CppType(self.add_type(idx, ctx)?),
-            3 | 6 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
+            3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
             5 => EncodedMethodIndex::StringLiteral(self.add_string_literal(idx)?),
+            6 => EncodedMethodIndex::MethodRef(todo!("generic method refs")),
             _ => bail!("Unsupported encoded method index with type {}", ty),
         })
     }
