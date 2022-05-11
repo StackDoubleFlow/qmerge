@@ -6,6 +6,10 @@ type TypeDefDescriptionIdx = usize;
 type MethodDescriptionIdx = usize;
 type StringLiteralIdx = usize;
 
+type GenericInstIdx = usize;
+type GenericMethodInstIdx = usize;
+type GenericClassInstIdx = usize;
+
 #[derive(Encode, Decode, Debug)]
 pub struct TypeDefDescription {
     pub name: String,
@@ -15,8 +19,11 @@ pub struct TypeDefDescription {
 #[derive(Encode, Decode, Debug)]
 pub enum TypeDescriptionData {
     TypeDefIdx(TypeDefDescriptionIdx),
+    TypeIdx(TypeDescriptionIdx),
+    // TODO: Arrays
     // Adding the owner here could make this self referencial during link
     GenericParam(u16),
+    GenericClass(GenericClassInstIdx),
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -25,6 +32,7 @@ pub struct TypeDescription {
     pub attrs: u16,
     pub ty: u8,
     pub by_ref: bool,
+    pub pinned: bool,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -111,10 +119,9 @@ pub enum EncodedMethodIndex {
     Il2CppType(TypeDescriptionIdx),
     MethodInfo(MethodDescriptionIdx),
     StringLiteral(StringLiteralIdx),
+    MethodRef(GenericMethodInstIdx),
     // TODO:
     // FieldInfo
-    // StringLiteral
-    // MethodRef
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -171,6 +178,38 @@ pub struct AddedGenericContainer {
 }
 
 #[derive(Encode, Decode, Debug)]
+pub struct GenericInst {
+    pub types: Vec<TypeDescriptionIdx>,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct GenericContext {
+    pub class: Option<GenericInstIdx>,
+    pub method: Option<GenericInstIdx>,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct GenericMethodInst {
+    pub method: MethodDescriptionIdx,
+    pub context: GenericContext,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct GenericMethodFunctions {
+    pub generic_method: GenericMethodInstIdx,
+
+    pub method_idx: usize,
+    pub invoker_idx: usize,
+    pub adjuster_thunk_idx: usize,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct GenericClassInst {
+    pub class: TypeDefDescriptionIdx,
+    pub context: GenericContext,
+}
+
+#[derive(Encode, Decode, Debug)]
 pub struct MergeModData {
     // Linkage information
     pub type_def_descriptions: Vec<TypeDefDescription>,
@@ -183,6 +222,12 @@ pub struct MergeModData {
     pub added_type_defintions: Vec<AddedTypeDefinition>,
     pub added_usage_lists: Vec<Vec<AddedMetadataUsagePair>>,
     pub added_string_literals: Vec<String>,
+
+    // Generics
+    pub generic_instances: Vec<GenericInst>,
+    pub generic_method_insts: Vec<GenericMethodInst>,
+    pub generic_method_funcs: Vec<GenericMethodFunctions>,
+    pub generic_class_insts: Vec<GenericClassInst>,
 }
 
 impl MergeModData {
