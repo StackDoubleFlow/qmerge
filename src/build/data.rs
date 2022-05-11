@@ -1,4 +1,4 @@
-use super::type_definitions::{Il2CppType, Il2CppTypeData, Il2CppTypeEnum};
+use super::type_definitions::{GenericClass, Il2CppType, Il2CppTypeData, Il2CppTypeEnum};
 use anyhow::{bail, ensure, Context, Result};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
@@ -70,6 +70,13 @@ impl GenericCtx {
     }
 }
 
+pub struct RuntimeMetadata<'a> {
+    pub types: &'a [Il2CppType<'a>],
+    pub ty_name_map: HashMap<&'a str, usize>,
+    pub generic_classes: &'a [GenericClass<'a>],
+    pub gc_name_map: HashMap<&'a str, usize>,
+}
+
 struct ModDefinitions {
     added_assembly: AddedAssembly,
     added_image: AddedImage,
@@ -78,7 +85,7 @@ struct ModDefinitions {
 
 pub struct ModDataBuilder<'md, 'ty> {
     pub metadata: &'md Metadata<'md>,
-    types: &'ty [Il2CppType<'ty>],
+    runtime_metadata: RuntimeMetadata<'ty>,
 
     type_definitions: Vec<TypeDefDescription>,
     type_def_map: HashMap<u32, usize>,
@@ -95,10 +102,10 @@ pub struct ModDataBuilder<'md, 'ty> {
 }
 
 impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
-    pub fn new(metadata: &'md Metadata, types: &'ty [Il2CppType]) -> Self {
+    pub fn new(metadata: &'md Metadata, runtime_metadata: RuntimeMetadata<'ty>) -> Self {
         ModDataBuilder {
             metadata,
-            types,
+            runtime_metadata,
             type_definitions: Vec::new(),
             type_def_map: HashMap::new(),
             added_types: Vec::new(),
@@ -312,7 +319,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         if self.type_map.contains_key(&idx) {
             return Ok(self.type_map[&idx]);
         }
-        let ty = &self.types[idx as usize];
+        let ty = &self.runtime_metadata.types[idx as usize];
         let data = match ty.data {
             Il2CppTypeData::TypeDefIdx(idx) => {
                 TypeDescriptionData::TypeDefIdx(self.add_type_def(idx as u32)?)

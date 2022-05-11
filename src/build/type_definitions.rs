@@ -120,9 +120,22 @@ pub struct Il2CppType<'src> {
     pub pinned: bool,
 }
 
-/// Parse Il2CppTypeDefinitions.c
-pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
+pub struct GenericClass<'src> {
+    pub ty_def_idx: usize,
+    pub class_inst: &'src str,
+}
+
+pub struct TypeDefinitionsFile<'src> {
+    pub types: Vec<Il2CppType<'src>>,
+    pub ty_name_map: HashMap<&'src str, usize>,
+    pub generic_classes: Vec<GenericClass<'src>>,
+    pub gc_name_map: HashMap<&'src str, usize>,
+}
+
+/// Parse Il2CppTypeDefinitions.c and Il2CppGenericClassTable.c
+pub fn parse<'src>(src: &'src str, gct_src: &'src str) -> Result<TypeDefinitionsFile<'src>> {
     let mut types = HashMap::new();
+    let mut generic_classes = HashMap::new();
     for line in src.lines() {
         if line.starts_with("const Il2CppType ") {
             let words: Vec<&str> = line.split_whitespace().collect();
@@ -157,18 +170,32 @@ pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
                 pinned,
             };
             types.insert(name, ty);
+        } else if line.starts_with("Il2CppGenericClass ") {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            let name = words[1];
+            let ty_def_idx = words[4].trim_end_matches(',').parse()?;
+            let class_inst = words[6].trim_start_matches('&').trim_end_matches(',');
+            generic_classes.insert(
+                name,
+                GenericClass {
+                    ty_def_idx,
+                    class_inst,
+                },
+            );
         }
     }
 
+    let mut ty_name_map = HashMap::new();
     let mut types_arr = Vec::new();
     let arr_start = src
         .find("const Il2CppType* const  g_Il2CppTypeTable")
         .context("could not find g_Il2CppTypeTable")?;
-    for line in src[arr_start..].lines().skip(3) {
+    for (i, line) in src[arr_start..].lines().skip(3).enumerate() {
         if line.starts_with('}') {
             break;
         }
         let name = line.trim().trim_start_matches('&').trim_end_matches(',');
+        ty_name_map.insert(name, i);
         types_arr.push(
             types
                 .remove(name)
@@ -176,5 +203,29 @@ pub fn parse(src: &str) -> Result<Vec<Il2CppType>> {
         );
     }
 
-    Ok(types_arr)
+    let mut gc_name_map = HashMap::new();
+    let mut gc_arr = Vec::new();
+    let gc_arr_start = gct_src
+        .find("Il2CppGenericClass* const s_Il2CppGenericTypes")
+        .context("could not find s_Il2CppGenericTypes")?;
+    for (i, line) in gct_src[gc_arr_start..].lines().skip(3).enumerate() {
+        if line.starts_with('}') {
+            break;
+        }
+        let name = line.trim().trim_start_matches('&').trim_end_matches(',');
+        gc_name_map.insert(name, i);
+        gc_arr.push(
+            generic_classes
+                .remove(name)
+                .context("gc table contained non-existant generic class")?,
+        );
+    }
+
+    Ok(TypeDefinitionsFile {
+        types: types_arr,
+        ty_name_map,
+
+        generic_classes: gc_arr,
+        gc_name_map,
+    })
 }

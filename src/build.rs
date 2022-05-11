@@ -18,6 +18,9 @@ use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
 
+use self::data::RuntimeMetadata;
+use self::type_definitions::TypeDefinitionsFile;
+
 const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
 
 struct FnDef<'a> {
@@ -235,8 +238,20 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mod_image = find_image(&metadata, &mod_image_name)?;
 
     let types_src = fs::read_to_string(cpp_path.join("Il2CppTypeDefinitions.c"))?;
-    let types = type_definitions::parse(&types_src)?;
-    let mut data_builder = ModDataBuilder::new(&metadata, &types);
+    let gct_src = fs::read_to_string(cpp_path.join("Il2CppGenericClassTable.c"))?;
+    let TypeDefinitionsFile {
+        types,
+        ty_name_map,
+        generic_classes,
+        gc_name_map,
+    } = type_definitions::parse(&types_src, &gct_src)?;
+    let runtime_metadata = RuntimeMetadata {
+        types: &types,
+        ty_name_map,
+        generic_classes: &generic_classes,
+        gc_name_map,
+    };
+    let mut data_builder = ModDataBuilder::new(&metadata, runtime_metadata);
     data_builder.add_mod_definitions(&mod_config.id)?;
 
     codegen::transform(
