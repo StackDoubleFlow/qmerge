@@ -3,7 +3,6 @@ mod codegen;
 mod data;
 mod generics;
 mod metadata_usage;
-mod modules;
 mod type_definitions;
 
 use crate::config::{Mod, APPS, CONFIG};
@@ -11,7 +10,6 @@ use anyhow::{bail, Context, Result};
 use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
-use modules::CodeGenModule;
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::iter::Peekable;
@@ -134,15 +132,14 @@ fn process_other(
     mod_id: &str,
     src: String,
     image: &Il2CppImageDefinition,
-    module: &CodeGenModule,
+    method_pointers: &[Option<&str>],
     data_builder: &mut ModDataBuilder,
 ) -> Result<String> {
     let mut lines = src.lines().peekable();
     let mut new_src = String::new();
 
     let mut add_method = |cpp_name: &str| -> Result<usize> {
-        let method_rid = module
-            .methods
+        let method_rid = method_pointers
             .iter()
             .position(|n| n == &Some(cpp_name))
             .context("could not find method in module")? as u32;
@@ -294,7 +291,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
         let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
             .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
-        let module = modules::parse(&code_gen_src)?;
+        let method_pointers = codegen::get_methods(&code_gen_src)?;
         let image = &metadata.images[assembly.image_index as usize];
         if name != mod_config.id {
             for i in 0.. {
@@ -311,7 +308,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                         &mod_config.id,
                         src,
                         image,
-                        &module,
+                        &method_pointers,
                         &mut data_builder,
                     )?;
                     if !new_src.is_empty() {

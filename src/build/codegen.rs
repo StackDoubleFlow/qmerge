@@ -8,6 +8,26 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
+pub fn get_methods(src: &str) -> Result<Vec<Option<&str>>> {
+    let mut methods = Vec::new();
+
+    if let Some(arr_start) = src.find("static Il2CppMethodPointer s_methodPointers") {
+        for line in src[arr_start..].lines().skip(1) {
+            if line.starts_with('}') {
+                break;
+            }
+            let name = line.trim().trim_end_matches(',');
+            if name == "NULL" {
+                methods.push(None);
+            } else {
+                methods.push(Some(name));
+            }
+        }
+    };
+
+    Ok(methods)
+}
+
 pub fn transform(
     compile_command: &mut CompileCommand,
     data_builder: &mut ModDataBuilder,
