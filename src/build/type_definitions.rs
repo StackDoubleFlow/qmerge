@@ -255,9 +255,10 @@ pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
             .map(|item| {
                 item.trim_end_matches(',')
                     .trim_end_matches(')')
-                    .trim_start_matches('(')
+                    .trim_start_matches("(&")
             })
             .collect();
+            dbg!(&types);
         insts.insert(name, SourceGenericInst { types });
     }
 
