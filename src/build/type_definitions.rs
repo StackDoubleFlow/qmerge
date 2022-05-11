@@ -229,3 +229,53 @@ pub fn parse<'src>(src: &'src str, gct_src: &'src str) -> Result<TypeDefinitions
         gc_name_map,
     })
 }
+
+pub struct SourceGenericInst<'src> {
+    pub types: Vec<&'src str>,
+}
+
+pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
+    let mut insts = HashMap::new();
+    let insts_start = match src.find("static const Il2CppType* ") {
+        Some(insts_start) => insts_start,
+        None => return Ok(Default::default()),
+    };
+    let lines = src[insts_start..].lines().step_by(3);
+    for line in lines {
+        if !line.starts_with("static const Il2CppType*") {
+            break;
+        }
+
+        let words = line.split_whitespace().collect::<Vec<_>>();
+        let name = words[3]
+            .strip_suffix("_Types[]")
+            .context("generic inst def has wrong name suffix")?;
+        let types = words[6..words.len() - 1]
+            .iter()
+            .map(|item| {
+                item.trim_end_matches(',')
+                    .trim_end_matches(')')
+                    .trim_start_matches('(')
+            })
+            .collect();
+        insts.insert(name, SourceGenericInst { types });
+    }
+
+    let mut arr = Vec::new();
+    let arr_start = src
+        .find("const Il2CppGenericInst* const g_Il2CppGenericInstTable")
+        .context("could not find g_Il2CppGenericInstTable")?;
+    for line in src[arr_start..].lines().skip(3) {
+        if line.starts_with('}') {
+            break;
+        }
+        let name = line.trim().trim_start_matches('&').trim_end_matches(',');
+        arr.push(
+            insts
+                .remove(name)
+                .context("gc table contained non-existant generic class")?,
+        );
+    }
+
+    Ok(arr)
+}

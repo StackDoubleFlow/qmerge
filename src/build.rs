@@ -55,7 +55,7 @@ impl<'a> FnDef<'a> {
 }
 
 pub fn try_parse_call(line: &str) -> Option<&str> {
-    let words: Vec<&str> = line.trim_start().split_whitespace().collect();
+    let words: Vec<&str> = line.split_whitespace().collect();
     if words.is_empty() {
         return None;
     }
@@ -245,11 +245,14 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         generic_classes,
         gc_name_map,
     } = type_definitions::parse(&types_src, &gct_src)?;
+    let gid_src = fs::read_to_string(cpp_path.join("Il2CppGenericInstDefinitions.c"))?;
+    let generic_insts = type_definitions::parse_inst_defs(&gid_src)?;
     let runtime_metadata = RuntimeMetadata {
         types: &types,
         ty_name_map,
         generic_classes: &generic_classes,
         gc_name_map,
+        generic_insts: &generic_insts,
     };
     let mut data_builder = ModDataBuilder::new(&metadata, runtime_metadata);
     data_builder.add_mod_definitions(&mod_config.id)?;

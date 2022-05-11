@@ -1,4 +1,6 @@
-use super::type_definitions::{GenericClass, Il2CppType, Il2CppTypeData, Il2CppTypeEnum};
+use super::type_definitions::{
+    GenericClass, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
+};
 use anyhow::{bail, ensure, Context, Result};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
@@ -75,6 +77,7 @@ pub struct RuntimeMetadata<'a> {
     pub ty_name_map: HashMap<&'a str, usize>,
     pub generic_classes: &'a [GenericClass<'a>],
     pub gc_name_map: HashMap<&'a str, usize>,
+    pub generic_insts: &'a [SourceGenericInst<'a>],
 }
 
 struct ModDefinitions {

@@ -87,20 +87,17 @@ pub fn transform(
                     break;
                 }
                 let len_str = line
-                    .trim()
                     .split_whitespace()
                     .nth(4)
                     .context("value in s_rgctxValues has wrong word count")?;
                 let len = str::parse(len_str)?;
                 let start_str = line
-                    .trim()
                     .split_whitespace()
                     .nth(3)
                     .unwrap()
                     .trim_end_matches(',');
                 let start = str::parse(start_str)?;
                 let token_str = line
-                    .trim()
                     .split_whitespace()
                     .nth(1)
                     .unwrap()
@@ -121,13 +118,11 @@ pub fn transform(
                     break;
                 }
                 let idx_str = line
-                    .trim()
                     .split_whitespace()
                     .nth(2)
                     .context("value in s_rgctxValues has wrong word count")?;
                 let idx = str::parse(idx_str)?;
                 let data_ty_str = line
-                    .trim()
                     .split_whitespace()
                     .nth(1)
                     .unwrap()
