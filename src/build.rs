@@ -2,6 +2,7 @@ mod clang;
 mod codegen;
 mod data;
 mod generics;
+mod invokers;
 mod metadata_usage;
 mod runtime_metadata;
 
@@ -19,17 +20,18 @@ use std::str::Lines;
 use std::{fs, str};
 
 use self::data::RuntimeMetadata;
+use self::invokers::ModFunctionUsages;
 use self::runtime_metadata::TypeDefinitionsFile;
 
 const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
 
-struct FnDef<'a> {
+struct FnDecl<'a> {
     return_ty: &'a str,
     name: &'a str,
     params: &'a str,
 }
 
-impl<'a> FnDef<'a> {
+impl<'a> FnDecl<'a> {
     fn try_parse(line: &'a str) -> Option<Self> {
         let line = if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
             line
@@ -46,7 +48,7 @@ impl<'a> FnDef<'a> {
         let name = rest.split_whitespace().last()?;
         let return_ty = rest[..rest.len() - name.len()].trim();
 
-        Some(FnDef {
+        Some(FnDecl {
             return_ty,
             name,
             params,
@@ -71,7 +73,10 @@ pub fn try_parse_call(line: &str) -> Option<&str> {
         words[0]
     };
     let possible_name = possible_name.split('(').next().unwrap();
-    let possible_name = possible_name.trim_end_matches("_inline");
+    if possible_name.ends_with("_inline") {
+        // Inlined functions will be defined in the same file anyways
+        return None;
+    }
     let len = possible_name.len();
     if possible_name.len() <= 42 {
         return None;
@@ -109,6 +114,7 @@ fn find_method_with_rid(
     image: &Il2CppImageDefinition,
     rid: u32,
 ) -> Result<usize> {
+    // dbg!(image, rid);
     for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
         for i in offset_len(type_def.method_start, type_def.method_count as u32) {
             if metadata.methods[i].token & 0x00FFFFFF == rid {
@@ -116,6 +122,20 @@ fn find_method_with_rid(
             }
         }
     }
+
+    for type_def in &metadata.type_definitions {
+        for i in offset_len(type_def.method_start, type_def.method_count as u32) {
+            if metadata.methods[i].token & 0x00FFFFFF == rid {
+                dbg!(get_str(metadata.string, type_def.name_index as usize)?);
+            }
+        }
+    }
+
+    let mut method_count = 0;
+    for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
+        method_count += type_def.method_count;
+    }
+    dbg!(method_count);
 
     bail!("could not find method with rid {}", rid);
 }
@@ -152,7 +172,7 @@ fn process_other(
 
     while let Some(line) = lines.next() {
         // Copy over function definitions and replace body with merge stub
-        if let Some(fn_def) = FnDef::try_parse(line) {
+        if let Some(fn_def) = FnDecl::try_parse(line) {
             if *lines.peek().unwrap() == "{" && usages.contains(fn_def.name) {
                 writeln!(new_src, "\n{}", line)?;
                 let idx = add_method(fn_def.name)?;
@@ -274,9 +294,26 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     )
     .context("error transforming codegen")?;
 
-    let mut usages = HashSet::new();
-    let mut mod_functions = HashSet::new();
+    let mut function_usages = ModFunctionUsages::default();
+    for assembly in &metadata.assemblies {
+        let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
+        let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
+            .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
+        let method_pointers = codegen::get_methods(&code_gen_src)?;
+        let image = &metadata.images[assembly.image_index as usize];
 
+        for (idx, method_pointer) in method_pointers.iter().enumerate() {
+            if let Some(method_pointer) = method_pointer {
+                let method_idx =
+                    find_method_with_rid(data_builder.metadata, image, idx as u32 + 1)?;
+                function_usages
+                    .external_methods
+                    .insert(method_pointer.to_string(), method_idx);
+            }
+        }
+    }
+
+    let mut mod_functions = HashSet::new();
     for i in 0.. {
         let path = if i > 0 {
             format!("{}{}.cpp", mod_config.id, i)
@@ -291,12 +328,28 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             let main_source = fs::read_to_string(src_path)?;
             let mut lines = main_source.lines().peekable();
             while let Some(line) = lines.next() {
-                if let Some(fn_def) = FnDef::try_parse(line) {
-                    if *lines.peek().unwrap() == "{" {
+                if let Some(fn_def) = FnDecl::try_parse(line) {
+                    if line.ends_with(';') {
+                        function_usages.forward_decls.insert(
+                            fn_def.name.to_string(),
+                            line.trim_end_matches(';').to_string(),
+                        );
+                    } else {
                         lines.next().unwrap();
-                        mod_functions.insert(fn_def.name.to_owned());
-                        get_function_usages(&mut usages, &mut lines);
+                        mod_functions.insert(fn_def.name.to_string());
+                        get_function_usages(&mut function_usages.usages, &mut lines);
                     }
+                } else if line.starts_with("inline") {
+                    let words = line.split_whitespace().collect::<Vec<_>>();
+                    let proxy_name =
+                        words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1];
+                    lines.next().unwrap();
+                    let line = lines.next().unwrap().trim();
+                    let name_start = line.find("))").unwrap() + 2;
+                    let name = line[name_start..].split(')').next().unwrap();
+                    function_usages
+                        .generic_proxies
+                        .insert(proxy_name.to_string(), name.to_string());
                 }
             }
         } else {
@@ -312,51 +365,14 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         mod_functions,
     )?;
 
-    for assembly in &metadata.assemblies {
-        let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
-        let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
-            .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
-        let method_pointers = codegen::get_methods(&code_gen_src)?;
-        let image = &metadata.images[assembly.image_index as usize];
-        if name != mod_config.id {
-            for i in 0.. {
-                let path = if i > 0 {
-                    format!("{}{}.cpp", name, i)
-                } else {
-                    format!("{}.cpp", name)
-                };
-                let src_path = cpp_path.join(&path);
-                if src_path.exists() {
-                    let src = fs::read_to_string(src_path)?;
-                    let new_src = process_other(
-                        &usages,
-                        &mod_config.id,
-                        src,
-                        image,
-                        &method_pointers,
-                        &mut data_builder,
-                    )?;
-                    if !new_src.is_empty() {
-                        let new_path = transformed_path.join(path);
-                        fs::write(&new_path, new_src).with_context(|| {
-                            format!("error writing transformed source to {}", new_path.display())
-                        })?;
-                        compile_command.add_source(new_path);
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-    }
+    function_usages.process(&mod_config.name, &mut data_builder, transformed_path)?;
+    // let mod_data = dbg!(data_builder.build()?);
 
-    let mod_data = dbg!(data_builder.build()?);
-
-    fs::write(
-        out_path.join(format!("{}.mmd", mod_config.id)),
-        mod_data.serialize()?,
-    )?;
-    compile_command.run()?;
+    // fs::write(
+    //     out_path.join(format!("{}.mmd", mod_config.id)),
+    //     mod_data.serialize()?,
+    // )?;
+    // compile_command.run()?;
 
     Ok(())
 }

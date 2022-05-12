@@ -12,7 +12,7 @@ pub fn get_methods(src: &str) -> Result<Vec<Option<&str>>> {
     let mut methods = Vec::new();
 
     if let Some(arr_start) = src.find("static Il2CppMethodPointer s_methodPointers") {
-        for line in src[arr_start..].lines().skip(1) {
+        for line in src[arr_start..].lines().skip(2) {
             if line.starts_with('}') {
                 break;
             }
