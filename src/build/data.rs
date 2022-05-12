@@ -10,8 +10,9 @@ use il2cpp_metadata_raw::{
 use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
-    AddedTypeDefinition, EncodedMethodIndex, GenericContainerOwner, MergeModData,
-    MethodDescription, TypeDefDescription, TypeDescription, TypeDescriptionData,
+    AddedTypeDefinition, EncodedMethodIndex, GenericContainerOwner, GenericContext, GenericInst,
+    GenericMethodInst, MergeModData, MethodDescription, TypeDefDescription, TypeDescription,
+    TypeDescriptionData,
 };
 use std::collections::HashMap;
 use std::str;
@@ -104,6 +105,12 @@ pub struct ModDataBuilder<'md, 'ty> {
     methods: Vec<MethodDescription>,
     method_def_map: HashMap<u32, usize>,
 
+    generic_methods: Vec<GenericMethodInst>,
+    generic_method_map: HashMap<u32, usize>,
+
+    generic_insts: Vec<GenericInst>,
+    generic_inst_map: HashMap<u32, usize>,
+
     mod_definitions: Option<ModDefinitions>,
     added_usage_lists: Vec<Vec<AddedMetadataUsagePair>>,
     added_string_literals: Vec<String>,
@@ -120,6 +127,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             type_map: HashMap::new(),
             methods: Vec::new(),
             method_def_map: HashMap::new(),
+            generic_methods: Vec::new(),
+            generic_method_map: HashMap::new(),
+            generic_insts: Vec::new(),
+            generic_inst_map: HashMap::new(),
             mod_definitions: None,
             added_usage_lists: Vec::new(),
             added_string_literals: Vec::new(),
@@ -500,6 +511,59 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(())
     }
 
+    fn add_generic_inst(&mut self, idx: u32, ctx: &GenericCtx) -> Result<usize> {
+        if self.generic_inst_map.contains_key(&idx) {
+            return Ok(self.generic_inst_map[&idx]);
+        }
+
+        let generic_inst = &self.runtime_metadata.generic_insts[idx as usize];
+
+        let desc_idx = self.generic_methods.len();
+        let desc = GenericInst {
+            types: generic_inst
+                .types
+                .iter()
+                .map(|ty_name| {
+                    self.add_type(self.runtime_metadata.ty_name_map[ty_name] as u32, ctx)
+                })
+                .collect::<Result<Vec<_>>>()?,
+        };
+        self.generic_insts.push(desc);
+        self.generic_inst_map.insert(idx, desc_idx);
+        Ok(desc_idx)
+    }
+
+    fn add_generic_method(&mut self, idx: u32) -> Result<usize> {
+        if self.generic_method_map.contains_key(&idx) {
+            return Ok(self.generic_method_map[&idx]);
+        }
+
+        let generic_method = &self.runtime_metadata.generic_methods[idx as usize];
+
+        let ctx = GenericCtx::for_method(
+            self.metadata,
+            &self.metadata.methods[generic_method.method_def],
+        );
+
+        let desc_idx = self.generic_methods.len();
+        let desc = GenericMethodInst {
+            method: self.add_method(generic_method.method_def as u32)?,
+            context: GenericContext {
+                class: generic_method
+                    .class_inst
+                    .map(|idx| self.add_generic_inst(idx as u32, &ctx))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                method: generic_method
+                    .method_isnt
+                    .map(|idx| self.add_generic_inst(idx as u32, &ctx))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+            },
+        };
+        self.generic_methods.push(desc);
+        self.generic_method_map.insert(idx, desc_idx);
+        Ok(desc_idx)
+    }
+
     fn add_encoded(&mut self, encoded_idx: u32, ctx: &GenericCtx) -> Result<EncodedMethodIndex> {
         let ty = (encoded_idx & 0xE0000000) >> 29;
         let idx = encoded_idx & 0x1FFFFFFF;
@@ -508,7 +572,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             2 => EncodedMethodIndex::Il2CppType(self.add_type(idx, ctx)?),
             3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
             5 => EncodedMethodIndex::StringLiteral(self.add_string_literal(idx)?),
-            6 => EncodedMethodIndex::MethodRef(todo!("generic method refs")),
+            6 => EncodedMethodIndex::MethodRef(self.add_generic_method(idx)?),
             _ => bail!("Unsupported encoded method index with type {}", ty),
         })
     }

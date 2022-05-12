@@ -5,6 +5,7 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
+use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
 
 // TODO: Figure out lifetimes for strings and use string slices for maps
@@ -21,6 +22,7 @@ pub struct ModFunctionUsages {
 impl ModFunctionUsages {
     pub fn process(
         self,
+        compile_command: &mut CompileCommand,
         mod_id: &str,
         data_builder: &mut ModDataBuilder,
         transformed_path: &Path,
@@ -47,7 +49,7 @@ impl ModFunctionUsages {
                     .collect();
                 let params = params.join(", ");
 
-                writeln!(external_src, "{}\n{{\n", decl)?;
+                writeln!(external_src, "{}\n{{", decl)?;
                 writeln!(
                     external_src,
                     "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
@@ -57,7 +59,9 @@ impl ModFunctionUsages {
             }
         }
 
-        fs::write(transformed_path.join("External.cpp"), external_src)?;
+        let external_path = transformed_path.join("External.cpp");
+        fs::write(&external_path, external_src)?;
+        compile_command.add_source(external_path);
 
         Ok(())
     }

@@ -365,7 +365,12 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         mod_functions,
     )?;
 
-    function_usages.process(&mod_config.name, &mut data_builder, transformed_path)?;
+    function_usages.process(
+        &mut compile_command,
+        &mod_config.id,
+        &mut data_builder,
+        transformed_path,
+    )?;
     // let mod_data = dbg!(data_builder.build()?);
 
     // fs::write(
