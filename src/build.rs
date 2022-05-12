@@ -3,7 +3,7 @@ mod codegen;
 mod data;
 mod generics;
 mod metadata_usage;
-mod type_definitions;
+mod runtime_metadata;
 
 use crate::config::{Mod, APPS, CONFIG};
 use anyhow::{bail, Context, Result};
@@ -19,7 +19,7 @@ use std::str::Lines;
 use std::{fs, str};
 
 use self::data::RuntimeMetadata;
-use self::type_definitions::TypeDefinitionsFile;
+use self::runtime_metadata::TypeDefinitionsFile;
 
 const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
 
@@ -244,15 +244,22 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         ty_name_map,
         generic_classes,
         gc_name_map,
-    } = type_definitions::parse(&types_src, &gct_src)?;
+    } = runtime_metadata::parse(&types_src, &gct_src)?;
     let gid_src = fs::read_to_string(cpp_path.join("Il2CppGenericInstDefinitions.c"))?;
-    let generic_insts = type_definitions::parse_inst_defs(&gid_src)?;
+    let generic_insts = runtime_metadata::parse_inst_defs(&gid_src)?;
+    let gmd_src = fs::read_to_string(cpp_path.join("Il2CppGenericMethodDefinitions.c"))?;
+    let generic_method_defs = runtime_metadata::parse_generic_method_defs(&gmd_src)?;
+    let gmt_src = fs::read_to_string(cpp_path.join("Il2CppGenericMethodTable.c"))?;
+    let generic_method_table = runtime_metadata::parse_generic_method_table(&gmt_src)?;
+
     let runtime_metadata = RuntimeMetadata {
         types: &types,
         ty_name_map,
         generic_classes: &generic_classes,
         gc_name_map,
         generic_insts: &generic_insts,
+        generic_methods: &generic_method_defs,
+        generic_method_funcs: &generic_method_table,
     };
     let mut data_builder = ModDataBuilder::new(&metadata, runtime_metadata);
     data_builder.add_mod_definitions(&mod_config.id)?;

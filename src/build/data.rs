@@ -1,5 +1,6 @@
-use super::type_definitions::{
-    GenericClass, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
+use super::runtime_metadata::{
+    GenericClass, GenericMethodSpec, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
+    SrcGenericMethodFuncs,
 };
 use anyhow::{bail, ensure, Context, Result};
 use il2cpp_metadata_raw::{
@@ -75,9 +76,13 @@ impl GenericCtx {
 pub struct RuntimeMetadata<'a> {
     pub types: &'a [Il2CppType<'a>],
     pub ty_name_map: HashMap<&'a str, usize>,
+
     pub generic_classes: &'a [GenericClass<'a>],
     pub gc_name_map: HashMap<&'a str, usize>,
+
     pub generic_insts: &'a [SourceGenericInst<'a>],
+    pub generic_methods: &'a [GenericMethodSpec],
+    pub generic_method_funcs: &'a [SrcGenericMethodFuncs],
 }
 
 struct ModDefinitions {

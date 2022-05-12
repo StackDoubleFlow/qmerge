@@ -258,7 +258,6 @@ pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
                     .trim_start_matches("(&")
             })
             .collect();
-            dbg!(&types);
         insts.insert(name, SourceGenericInst { types });
     }
 
@@ -279,4 +278,65 @@ pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
     }
 
     Ok(arr)
+}
+
+pub struct GenericMethodSpec {
+    pub method_def: usize,
+    pub class_inst: Option<usize>,
+    pub method_isnt: Option<usize>,
+}
+
+pub fn parse_generic_method_defs(src: &str) -> Result<Vec<GenericMethodSpec>> {
+    let mut specs = Vec::new();
+    let arr_start = src
+        .find("const Il2CppMethodSpec g_Il2CppMethodSpecTable")
+        .context("could not find g_Il2CppMethodSpecTable")?;
+    for line in src[arr_start..].lines().skip(3) {
+        if line.starts_with('}') {
+            break;
+        }
+        let words = line.split_whitespace().collect::<Vec<_>>();
+        let class_inst = words[2].trim_end_matches(',').parse::<isize>()?;
+        let method_isnt = words[3].trim_end_matches(',').parse::<isize>()?;
+        specs.push(GenericMethodSpec {
+            method_def: words[1].trim_end_matches(',').parse()?,
+            class_inst: class_inst.try_into().ok(),
+            method_isnt: method_isnt.try_into().ok(),
+        });
+    }
+
+    Ok(specs)
+}
+
+pub struct SrcGenericMethodFuncs {
+    pub generic_method_idx: usize,
+
+    pub method_idx: usize,
+    pub invoker_idx: usize,
+    pub adjustor_thunk_idx: Option<usize>,
+}
+
+pub fn parse_generic_method_table(src: &str) -> Result<Vec<SrcGenericMethodFuncs>> {
+    let mut methods = Vec::new();
+    let arr_start = src
+        .find("const Il2CppGenericMethodFunctionsDefinitions s_Il2CppGenericMethodFunctions")
+        .context("could not find s_Il2CppGenericMethodFunctions")?;
+    for line in src[arr_start..].lines().skip(3) {
+        if line.starts_with('}') {
+            break;
+        }
+        let words = line.split_whitespace().collect::<Vec<_>>();
+        let generic_method_idx = words[1].trim_end_matches(',').parse()?;
+        let method_idx = words[2].split('/').next().unwrap().parse()?;
+        let invoker_idx = words[3].split('/').next().unwrap().parse()?;
+        let adjustor_thunk_idx = words[4].trim_end_matches("},").parse::<isize>()?;
+        methods.push(SrcGenericMethodFuncs {
+            generic_method_idx,
+            method_idx,
+            invoker_idx,
+            adjustor_thunk_idx: adjustor_thunk_idx.try_into().ok(),
+        });
+    }
+
+    Ok(methods)
 }
