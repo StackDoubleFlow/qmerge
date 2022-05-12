@@ -22,7 +22,8 @@ pub fn transform(
             let name = words[2];
             let fn_name = &name[..name.len() - 16];
             if mod_functions.contains(fn_name) {
-                required_usage_ids.push(words[4].trim_end_matches(';').parse::<u32>()?)
+                let id = words[4].trim_end_matches(';').parse::<u32>()?;
+                required_usage_ids.push((name, id));
             }
         }
     }
@@ -30,8 +31,12 @@ pub fn transform(
     let mut usage_map = HashMap::new();
     // the indicies to add to the runtime metadataUsages table in order
     let mut usage_list = Vec::new();
-    for idx in required_usage_ids {
-        data_buider.add_metadata_usage_range(&mut usage_map, &mut usage_list, idx)?;
+    let mut new_usage_ids = String::new();
+    for (name, idx) in required_usage_ids {
+        dbg!(name, idx);
+        let new_idx = data_buider.add_metadata_usage_range(&mut usage_map, &mut usage_list, idx)?;
+        writeln!(new_usage_ids, "extern const uint32_t {};", name)?;
+        writeln!(new_usage_ids, "const uint32_t {} = {};", name, new_idx)?;
     }
 
     let mut using_names = HashSet::new();
@@ -88,23 +93,14 @@ pub fn transform(
                     break;
                 }
             }
-        } else if line.starts_with("extern const uint32_t") {
-            lines.next().unwrap();
-            let name = &line[22..line.len() - 17];
-            if mod_functions.contains(name) {
-                writeln!(new_src, "{}", line)?;
-                // TODO: this is a hack and depends on HashSet iteration order being stable as long as it's not modified, plus its slow
-                let idx = mod_functions.iter().position(|s| s == name).unwrap();
-                writeln!(
-                    new_src,
-                    "const uint32_t {}_MetadataUsageId = {};",
-                    name, idx
-                )?;
-            }
-        } else {
+        } else if !line
+            .trim_start_matches("extern ")
+            .starts_with("const uint32_t")
+        {
             writeln!(new_src, "{}", line)?;
         }
     }
+    new_src.push_str(&new_usage_ids);
 
     let new_path = transformed_path.join("Il2CppMetadataUsage.c");
     fs::write(&new_path, new_src)?;

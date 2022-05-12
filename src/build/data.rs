@@ -485,7 +485,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         usage_map: &mut HashMap<u32, usize>,
         usage_list: &mut Vec<usize>,
         idx: u32,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         let list = &self.metadata.metadata_usage_lists[idx as usize];
 
         let ctx = GenericCtx {
@@ -506,9 +506,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 source: self.add_encoded(pair.encoded_source_index, &ctx)?,
             })
         }
+        let usage_list_idx = self.added_usage_lists.len();
         self.added_usage_lists.push(new_list);
 
-        Ok(())
+        Ok(usage_list_idx)
     }
 
     fn add_generic_inst(&mut self, idx: u32, ctx: &GenericCtx) -> Result<usize> {

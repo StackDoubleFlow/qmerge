@@ -371,7 +371,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         &mut data_builder,
         transformed_path,
     )?;
-    // let mod_data = dbg!(data_builder.build()?);
+    let mod_data = dbg!(data_builder.build()?);
 
     // fs::write(
     //     out_path.join(format!("{}.mmd", mod_config.id)),
