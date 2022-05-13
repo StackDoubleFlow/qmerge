@@ -4,6 +4,7 @@ mod data;
 mod generics;
 mod invokers;
 mod metadata_usage;
+mod parser;
 mod runtime_metadata;
 
 use crate::config::{Mod, APPS, CONFIG};
@@ -11,7 +12,7 @@ use anyhow::{bail, Context, Result};
 use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::Lines;
@@ -19,74 +20,10 @@ use std::{fs, str};
 
 use self::data::RuntimeMetadata;
 use self::invokers::ModFunctionUsages;
+use self::parser::{is_struct_name, try_parse_call, FnDecl};
 use self::runtime_metadata::TypeDefinitionsFile;
 
 const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
-
-struct FnDecl<'a> {
-    return_ty: &'a str,
-    name: &'a str,
-    params: &'a str,
-    inline: bool,
-}
-
-impl<'a> FnDecl<'a> {
-    fn try_parse(line: &'a str) -> Option<Self> {
-        let (line, inline) = if let Some(line) =
-            line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR")
-        {
-            (line, false)
-        } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR") {
-            (line, true)
-        } else {
-            (
-                line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?,
-                true,
-            )
-        };
-
-        let param_start = line.find('(')?;
-        let params = &line[param_start..];
-        let rest = line[..param_start].trim();
-
-        let name = rest.split_whitespace().last()?;
-        let return_ty = rest[..rest.len() - name.len()].trim();
-
-        Some(FnDecl {
-            return_ty,
-            name,
-            params,
-            inline,
-        })
-    }
-}
-
-pub fn try_parse_call(line: &str, include_inline: bool) -> Option<&str> {
-    let possible_name = if let Some(pos) = line.find("= ") {
-        &line[pos + 2..]
-    } else {
-        line.trim()
-    };
-    let possible_name = possible_name.split('(').next().unwrap();
-    if possible_name.ends_with("_inline") && !include_inline {
-        // Inlined functions will be defined in the same file anyways
-        return None;
-    }
-    let len = possible_name.len();
-    if possible_name.len() <= 42 {
-        return None;
-    }
-    if &possible_name[len - 42..len - 40] == "_m" {
-        let valid_id = possible_name[possible_name.len() - 40..]
-            .chars()
-            .all(|c| ('A'..='Z').contains(&c) || ('0'..='9').contains(&c));
-        if valid_id {
-            return Some(possible_name);
-        }
-    }
-
-    None
-}
 
 fn get_function_usages<'a>(usages: &mut HashSet<&'a str>, lines: &mut Lines<'a>) {
     loop {
@@ -107,7 +44,6 @@ fn find_method_with_rid(
     image: &Il2CppImageDefinition,
     rid: u32,
 ) -> Result<usize> {
-    // dbg!(image, rid);
     for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
         for i in offset_len(type_def.method_start, type_def.method_count as u32) {
             if metadata.methods[i].token & 0x00FFFFFF == rid {
@@ -136,7 +72,7 @@ fn get_numbered_paths(source_paths: &mut Vec<String>, cpp_path: &Path, name: &st
         } else {
             name.to_string()
         };
-        let path = cpp_path.join(&name).with_extension("cpp");
+        let path = cpp_path.join(format!("{}.cpp", name));
         if path.exists() {
             source_paths.push(name);
         } else {
@@ -238,11 +174,40 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mut codegen_source_names = Vec::new();
     get_numbered_paths(&mut codegen_source_names, cpp_path, &mod_config.id);
     let mut codegen_sources = Vec::new();
+    let mut extern_code_source_names = Vec::new();
     for assembly in &metadata.assemblies {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
+        get_numbered_paths(&mut extern_code_source_names, cpp_path, name);
         let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
             .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
         codegen_sources.push((assembly.image_index, code_gen_src))
+    }
+
+    let mut extern_code_sources = Vec::new();
+    for name in extern_code_source_names {
+        let src_path = cpp_path.join(format!("{}.cpp", name));
+        extern_code_sources.push(fs::read_to_string(src_path)?);
+    }
+    let mut struct_defs = HashMap::new();
+    for src in &extern_code_sources {
+        let mut lines = src.lines();
+        while let Some(line) = lines.next() {
+            let line = line.trim_end();
+            if line.starts_with("struct") && !line.contains(':') && is_struct_name(&line[6..]) {
+                lines.next().unwrap();
+                lines.next().unwrap();
+                let mut body = String::new();
+                for line in lines.by_ref() {
+                    if line.is_empty() {
+                        break;
+                    }
+                    body.push_str(line);
+                    body.push('\n');
+                }
+                let name = &line[7..];
+                struct_defs.insert(name, body);
+            }
+        }
     }
 
     // Populate list of all external method pointers by reading CodeGen.c for all modules except the mod's

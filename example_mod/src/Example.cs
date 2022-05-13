@@ -16,9 +16,14 @@ namespace MergeExample
             return "Hello World";
         }
 
-        public void Dummy() {
+        public void Dummy(TestStruct testStruct) {
             TestGenerics<int>(1, 2);
             TestGenerics<double>(1.0, 2.0);
         }
+    }
+
+    public struct TestStruct {
+        double a;
+        double b;
     }
 }

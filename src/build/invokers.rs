@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 use std::str::Lines;
-
 use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
 

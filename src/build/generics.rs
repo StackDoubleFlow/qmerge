@@ -147,10 +147,5 @@ pub fn transform<'a>(
         }
     }
 
-    dbg!(&function_usages.using_external);
-    dbg!(&metadata_usage_names);
-
-    // dbg!(&function_usages.forward_decls);
-
     Ok(())
 }
