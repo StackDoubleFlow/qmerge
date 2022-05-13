@@ -200,7 +200,7 @@ pub struct GenericMethodFunctions {
 
     pub method_idx: usize,
     pub invoker_idx: usize,
-    pub adjuster_thunk_idx: usize,
+    pub adjuster_thunk_idx: Option<usize>,
 }
 
 #[derive(Encode, Decode, Debug)]

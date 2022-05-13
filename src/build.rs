@@ -1,7 +1,6 @@
 mod clang;
 mod codegen;
 mod data;
-mod generics;
 mod invokers;
 mod metadata_usage;
 mod runtime_metadata;
@@ -284,6 +283,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mut data_builder = ModDataBuilder::new(&metadata, runtime_metadata);
     data_builder.add_mod_definitions(&mod_config.id)?;
 
+    let mut function_usages = ModFunctionUsages::default();
     codegen::transform(
         &mut compile_command,
         &mut data_builder,
@@ -291,10 +291,10 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         cpp_path,
         transformed_path,
         &mod_config.id,
+        &mut function_usages,
     )
     .context("error transforming codegen")?;
 
-    let mut function_usages = ModFunctionUsages::default();
     for assembly in &metadata.assemblies {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
         let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
@@ -371,7 +371,14 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         &mut data_builder,
         transformed_path,
     )?;
-    let mod_data = dbg!(data_builder.build()?);
+    let mod_data = dbg!(data_builder.build(&mut function_usages)?);
+    function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
+    function_usages.write_generic_func_table(&mut compile_command, transformed_path, cpp_path)?;
+    function_usages.write_generic_adj_thunk_table(
+        &mut compile_command,
+        transformed_path,
+        cpp_path,
+    )?;
 
     // fs::write(
     //     out_path.join(format!("{}.mmd", mod_config.id)),

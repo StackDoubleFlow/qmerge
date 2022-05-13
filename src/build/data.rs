@@ -1,3 +1,4 @@
+use super::invokers::ModFunctionUsages;
 use super::runtime_metadata::{
     GenericClass, GenericMethodSpec, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
     SrcGenericMethodFuncs,
@@ -11,8 +12,8 @@ use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
     AddedTypeDefinition, EncodedMethodIndex, GenericContainerOwner, GenericContext, GenericInst,
-    GenericMethodInst, MergeModData, MethodDescription, TypeDefDescription, TypeDescription,
-    TypeDescriptionData,
+    GenericMethodFunctions, GenericMethodInst, MergeModData, MethodDescription, TypeDefDescription,
+    TypeDescription, TypeDescriptionData,
 };
 use std::collections::HashMap;
 use std::str;
@@ -443,7 +444,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         }))
     }
 
-    pub fn build(self) -> Result<MergeModData> {
+    pub fn build(self, function_usages: &mut ModFunctionUsages) -> Result<MergeModData> {
         let ModDefinitions {
             added_assembly,
             added_image,
@@ -451,6 +452,29 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         } = self
             .mod_definitions
             .context("tried to build mod data without mod defintions")?;
+        let mut generic_funcs = Vec::new();
+        for i in 0..self.generic_methods.len() {
+            let orig_idx = self
+                .generic_method_map
+                .iter()
+                .find_map(|(&k, &v)| if v == i { Some(k) } else { None })
+                .unwrap() as usize;
+            let funcs = self
+                .runtime_metadata
+                .generic_method_funcs
+                .iter()
+                .find(|fs| fs.generic_method_idx == orig_idx)
+                .unwrap();
+
+            generic_funcs.push(GenericMethodFunctions {
+                generic_method: i,
+                method_idx: function_usages.add_generic_func(funcs.method_idx),
+                invoker_idx: function_usages.add_invoker(funcs.invoker_idx),
+                adjuster_thunk_idx: funcs
+                    .adjustor_thunk_idx
+                    .map(|idx| function_usages.add_generic_adj_thunk(idx)),
+            })
+        }
         Ok(MergeModData {
             type_def_descriptions: self.type_definitions,
             type_descriptions: self.added_types,
@@ -462,10 +486,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             added_usage_lists: self.added_usage_lists,
             added_string_literals: self.added_string_literals,
 
-            generic_instances: Vec::new(),    // TODO
-            generic_method_insts: Vec::new(), // TODO
-            generic_method_funcs: Vec::new(), // TODO
-            generic_class_insts: Vec::new(),  // TODO
+            generic_instances: self.generic_insts,
+            generic_method_insts: self.generic_methods,
+            generic_method_funcs: generic_funcs,
+            generic_class_insts: Vec::new(), // TODO
         })
     }
 
