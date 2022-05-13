@@ -132,6 +132,7 @@ pub fn transform<'a>(
             visited.insert(inline);
             let src_name = &source_names[src_idx];
             let md_usage_name = inline.trim_end_matches("_inline").to_string() + src_name;
+            // TODO: metadata usage name for gshared inline
             metadata_usage_names.insert(md_usage_name);
             let src = &sources[src_idx];
             process_fn(
