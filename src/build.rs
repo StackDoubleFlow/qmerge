@@ -248,7 +248,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     // Populate list of all external method pointers by reading CodeGen.c for all modules except the mod's
     for (image_idx, src) in &codegen_sources {
         let image = &metadata.images[*image_idx as usize];
-        let method_pointers = codegen::get_methods(&src)?;
+        let method_pointers = codegen::get_methods(src)?;
 
         for (idx, method_pointer) in method_pointers.iter().enumerate() {
             if let Some(method_pointer) = method_pointer {

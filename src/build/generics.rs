@@ -103,7 +103,6 @@ pub fn transform<'a>(
         }
     }
 
-    // let mut gshared_queue = function_usages.using_gshared.iter().map(|s| s.as_str()).collect::<Vec<_>>();
     let mut gshared_queue = function_usages
         .using_gshared
         .iter()
