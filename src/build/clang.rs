@@ -55,7 +55,7 @@ impl CompileCommand {
             .arg("-o")
             .arg(&self.output_path)
             .args(&self.source_files);
-        dbg!(&command);
+        // dbg!(&command);
         let status = command
             .status()
             .context("failed to execute compile command")?;

@@ -68,7 +68,7 @@ impl ModFunctionUsages {
             }
         }
 
-        let external_path = transformed_path.join("External.cpp");
+        let external_path = transformed_path.join("MergeExternal.cpp");
         fs::write(&external_path, external_src)?;
         compile_command.add_source(external_path);
 
