@@ -33,7 +33,6 @@ pub fn transform(
     let mut usage_list = Vec::new();
     let mut new_usage_ids = String::new();
     for (name, idx) in required_usage_ids {
-        dbg!(name, idx);
         let new_idx = data_buider.add_metadata_usage_range(&mut usage_map, &mut usage_list, idx)?;
         writeln!(new_usage_ids, "extern const uint32_t {};", name)?;
         writeln!(new_usage_ids, "const uint32_t {} = {};", name, new_idx)?;

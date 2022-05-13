@@ -4,6 +4,7 @@ mod data;
 mod invokers;
 mod metadata_usage;
 mod runtime_metadata;
+mod generics;
 
 use crate::config::{Mod, APPS, CONFIG};
 use anyhow::{bail, Context, Result};
@@ -11,7 +12,6 @@ use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use std::collections::HashSet;
-use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::Lines;
@@ -27,16 +27,17 @@ struct FnDecl<'a> {
     return_ty: &'a str,
     name: &'a str,
     params: &'a str,
+    inline: bool
 }
 
 impl<'a> FnDecl<'a> {
     fn try_parse(line: &'a str) -> Option<Self> {
-        let line = if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
-            line
+        let (line, inline) = if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
+            (line, false)
         } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR") {
-            line
+            (line, true)
         } else {
-            line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?
+            (line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?, true)
         };
 
         let param_start = line.find('(')?;
@@ -50,28 +51,19 @@ impl<'a> FnDecl<'a> {
             return_ty,
             name,
             params,
+            inline
         })
     }
 }
 
-pub fn try_parse_call(line: &str) -> Option<&str> {
-    let words: Vec<&str> = line.split_whitespace().collect();
-    if words.is_empty() {
-        return None;
-    }
-
-    let possible_name = if words.len() > 3 && words[2] == "=" {
-        // Store return into new variable
-        words[3]
-    } else if words.len() > 2 && words[1] == "=" {
-        // Store return into existing variable
-        words[2]
+pub fn try_parse_call(line: &str, include_inline: bool) -> Option<&str> {
+    let possible_name = if let Some(pos) = line.find("= ") {
+        &line[pos + 2..]
     } else {
-        // Don't store return
-        words[0]
+        line.trim()
     };
     let possible_name = possible_name.split('(').next().unwrap();
-    if possible_name.ends_with("_inline") {
+    if possible_name.ends_with("_inline") && !include_inline {
         // Inlined functions will be defined in the same file anyways
         return None;
     }
@@ -91,15 +83,13 @@ pub fn try_parse_call(line: &str) -> Option<&str> {
     None
 }
 
-type PeekableLines<'a> = Peekable<Lines<'a>>;
-
-fn get_function_usages(usages: &mut HashSet<String>, lines: &mut PeekableLines) {
+fn get_function_usages(usages: &mut HashSet<String>, lines: &mut Lines) {
     loop {
         let line = lines.next().unwrap();
         if line == "}" {
             return;
         }
-        if let Some(name) = try_parse_call(line) {
+        if let Some(name) = try_parse_call(line, false) {
             if !usages.contains(name) {
                 usages.insert(name.to_owned());
             }
@@ -121,19 +111,10 @@ fn find_method_with_rid(
         }
     }
 
-    for type_def in &metadata.type_definitions {
-        for i in offset_len(type_def.method_start, type_def.method_count as u32) {
-            if metadata.methods[i].token & 0x00FFFFFF == rid {
-                dbg!(get_str(metadata.string, type_def.name_index as usize)?);
-            }
-        }
-    }
-
     let mut method_count = 0;
     for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
         method_count += type_def.method_count;
     }
-    dbg!(method_count);
 
     bail!("could not find method with rid {}", rid);
 }
@@ -256,20 +237,22 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         }
     }
 
-    let mut mod_functions = HashSet::new();
+    let mut metadata_usage_names = HashSet::new();
+    let mut mod_usages = HashSet::new();
     for i in 0.. {
-        let path = if i > 0 {
-            format!("{}{}.cpp", mod_config.id, i)
+        let file_name = if i > 0 {
+            format!("{}{}", mod_config.id, i)
         } else {
-            format!("{}.cpp", mod_config.id)
+            format!("{}", mod_config.id)
         };
+        let path = Path::new(&file_name).with_extension("cpp");
         let src_path = cpp_path.join(&path);
         if src_path.exists() {
             let new_path = transformed_path.join(path);
             fs::copy(&src_path, &new_path)?;
             compile_command.add_source(new_path);
             let main_source = fs::read_to_string(src_path)?;
-            let mut lines = main_source.lines().peekable();
+            let mut lines = main_source.lines();
             while let Some(line) = lines.next() {
                 if let Some(fn_def) = FnDecl::try_parse(line) {
                     if line.ends_with(';') {
@@ -279,8 +262,12 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                         );
                     } else {
                         lines.next().unwrap();
-                        mod_functions.insert(fn_def.name.to_string());
-                        get_function_usages(&mut function_usages.usages, &mut lines);
+                        if fn_def.inline {
+                            metadata_usage_names.insert(fn_def.name.to_string() + &file_name);
+                        } else {
+                            metadata_usage_names.insert(fn_def.name.to_string());
+                        }
+                        get_function_usages(&mut mod_usages, &mut lines);
                     }
                 } else if line.starts_with("inline") {
                     let words = line.split_whitespace().collect::<Vec<_>>();
@@ -299,22 +286,25 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             break;
         }
     }
+    function_usages.process_function_usages(mod_usages)?;
+    generics::transform(cpp_path, &mut function_usages, &mut metadata_usage_names)?;
 
     metadata_usage::transform(
         &mut compile_command,
         cpp_path,
         transformed_path,
         &mut data_builder,
-        mod_functions,
+        metadata_usage_names,
     )?;
 
-    function_usages.process(
+    function_usages.write_external(
         &mut compile_command,
         &mod_config.id,
         &mut data_builder,
         transformed_path,
     )?;
-    let mod_data = dbg!(data_builder.build(&mut function_usages)?);
+    let mod_data = data_builder.build(&mut function_usages)?;
+    // dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_adj_thunk_table(

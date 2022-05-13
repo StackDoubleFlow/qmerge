@@ -1,5 +1,5 @@
 use crate::build::FnDecl;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::fs;
@@ -14,9 +14,11 @@ pub struct ModFunctionUsages {
     // Mapping from name to method def metadata idx
     pub external_methods: HashMap<String, usize>,
     pub forward_decls: HashMap<String, String>,
-    pub usages: HashSet<String>,
-    pub using_gshared: HashSet<String>,
     pub generic_proxies: HashMap<String, String>,
+
+    // Usages of the module sources, not from generic sources
+    pub using_gshared: HashSet<String>,
+    pub using_external: HashSet<String>,
 
     pub required_invokers: Vec<usize>,
     pub invokers_map: HashMap<usize, usize>,
@@ -29,7 +31,29 @@ pub struct ModFunctionUsages {
 }
 
 impl ModFunctionUsages {
-    pub fn process(
+    pub fn process_function_usage(&mut self, usage: &str) -> Result<()> {
+        if self.external_methods.contains_key(usage) {
+            self.using_external.insert(usage.to_string());
+        } else if let Some(gshared) = self.generic_proxies.get(usage) {
+            if !self.using_gshared.contains(gshared) {
+                self.using_gshared.insert(gshared.to_string());
+            }
+        } else {
+            bail!("unable to handle function usage: {}", usage);
+        }
+
+        Ok(())
+    }
+
+    pub fn process_function_usages(&mut self, usages: HashSet<String>) -> Result<()> {
+        for usage in &usages {
+            self.process_function_usage(usage)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_external(
         &mut self,
         compile_command: &mut CompileCommand,
         mod_id: &str,
@@ -41,31 +65,30 @@ impl ModFunctionUsages {
         writeln!(external_src, "#include \"merge/codegen.h\"")?;
         writeln!(external_src)?;
 
-        for usage in &self.usages {
-            if let Some(&orig_idx) = self.external_methods.get(usage) {
-                let idx = data_builder.add_method(orig_idx as u32)?;
-                let decl = &self.forward_decls[usage];
-                let fn_def = FnDecl::try_parse(decl).unwrap();
+        for external in &self.using_external {
+            let orig_idx = self.external_methods[external];
+            let idx = data_builder.add_method(orig_idx as u32)?;
+            let decl = &self.forward_decls[external];
+            let fn_def = FnDecl::try_parse(decl).unwrap();
 
-                let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
-                let params: Vec<String> = params
-                    .split(',')
-                    .map(|param| param.split_whitespace().last())
-                    .collect::<Option<Vec<&str>>>()
-                    .unwrap()
-                    .into_iter()
-                    .map(String::from)
-                    .collect();
-                let params = params.join(", ");
+            let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
+            let params: Vec<String> = params
+                .split(',')
+                .map(|param| param.split_whitespace().last())
+                .collect::<Option<Vec<&str>>>()
+                .unwrap()
+                .into_iter()
+                .map(String::from)
+                .collect();
+            let params = params.join(", ");
 
-                writeln!(external_src, "{}\n{{", decl)?;
-                writeln!(
-                    external_src,
-                    "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
-                    fn_def.return_ty, fn_def.params, mod_id, idx, params
-                )?;
-                writeln!(external_src, "}}\n")?;
-            }
+            writeln!(external_src, "{}\n{{", decl)?;
+            writeln!(
+                external_src,
+                "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
+                fn_def.return_ty, fn_def.params, mod_id, idx, params
+            )?;
+            writeln!(external_src, "}}\n")?;
         }
 
         let external_path = transformed_path.join("MergeExternal.cpp");
