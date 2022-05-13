@@ -11,7 +11,6 @@ use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use std::collections::HashSet;
-use std::fmt::Write;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -147,62 +146,6 @@ fn find_image<'md>(metadata: &'md Metadata, find_name: &str) -> Result<&'md Il2C
         }
     }
     bail!("could not find image: {}", find_name);
-}
-
-fn process_other(
-    usages: &HashSet<String>,
-    mod_id: &str,
-    src: String,
-    image: &Il2CppImageDefinition,
-    method_pointers: &[Option<&str>],
-    data_builder: &mut ModDataBuilder,
-) -> Result<String> {
-    let mut lines = src.lines().peekable();
-    let mut new_src = String::new();
-
-    let mut add_method = |cpp_name: &str| -> Result<usize> {
-        let method_rid = method_pointers
-            .iter()
-            .position(|n| n == &Some(cpp_name))
-            .context("could not find method in module")? as u32;
-        let method_idx = find_method_with_rid(data_builder.metadata, image, method_rid)?;
-        data_builder.add_method(method_idx as u32)
-    };
-
-    while let Some(line) = lines.next() {
-        // Copy over function definitions and replace body with merge stub
-        if let Some(fn_def) = FnDecl::try_parse(line) {
-            if *lines.peek().unwrap() == "{" && usages.contains(fn_def.name) {
-                writeln!(new_src, "\n{}", line)?;
-                let idx = add_method(fn_def.name)?;
-                let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
-                let params: Vec<String> = params
-                    .split(',')
-                    .map(|param| param.split_whitespace().last())
-                    .collect::<Option<Vec<&str>>>()
-                    .unwrap()
-                    .into_iter()
-                    .map(String::from)
-                    .collect();
-                let params = params.join(", ");
-
-                writeln!(new_src, "{{")?;
-                writeln!(
-                    new_src,
-                    "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
-                    fn_def.return_ty, fn_def.params, mod_id, idx, params
-                )?;
-                writeln!(new_src, "}}")?;
-            }
-        }
-    }
-
-    if !new_src.is_empty() {
-        new_src.insert_str(0, "#include \"codegen/il2cpp-codegen.h\"\n");
-        new_src.insert_str(0, "#include \"merge/codegen.h\"\n");
-    }
-
-    Ok(new_src)
 }
 
 pub fn build(regen_cpp: bool) -> Result<()> {
@@ -380,11 +323,11 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         cpp_path,
     )?;
 
-    // fs::write(
-    //     out_path.join(format!("{}.mmd", mod_config.id)),
-    //     mod_data.serialize()?,
-    // )?;
-    // compile_command.run()?;
+    fs::write(
+        out_path.join(format!("{}.mmd", mod_config.id)),
+        mod_data.serialize()?,
+    )?;
+    compile_command.run()?;
 
     Ok(())
 }
