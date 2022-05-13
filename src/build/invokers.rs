@@ -1,5 +1,5 @@
 use crate::build::FnDecl;
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::fs;

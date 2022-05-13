@@ -1,10 +1,10 @@
-use std::{path::{Path, PathBuf}, fs, collections::{HashSet, HashMap}, str::Lines};
-
-use anyhow::{Result, bail};
-
-use crate::build::{try_parse_call};
-
-use super::{invokers::ModFunctionUsages, FnDecl};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
+use anyhow::{bail, Result};
+use crate::build::try_parse_call;
+use super::invokers::ModFunctionUsages;
+use super::FnDecl;
 
 fn get_numbered_paths(source_paths: &mut Vec<String>, cpp_path: &Path, name: &str) {
     for i in 0.. {
@@ -22,26 +22,26 @@ fn get_numbered_paths(source_paths: &mut Vec<String>, cpp_path: &Path, name: &st
     }
 }
 
-// fn get_function_usages(usages: &mut HashSet<String>, lines: &mut Lines) {
-//     loop {
-//         let line = lines.next().unwrap();
-//         if line == "}" {
-//             return;
-//         }
-//         if let Some(name) = try_parse_call(line, false) {
-//             if !usages.contains(name) {
-//                 usages.insert(name.to_owned());
-//             }
-//         }
-//     }
-// }
-
-fn process_usage(usage: &str, function_usages: &mut ModFunctionUsages, visited: &HashSet<String>, gshared_queue: &mut Vec<String>) -> Result<()> {
+fn process_line<'a>(
+    line: &'a str,
+    src_idx: usize,
+    function_usages: &mut ModFunctionUsages,
+    visited: &HashSet<String>,
+    gshared_queue: &mut Vec<String>,
+    inline_queue: &mut Vec<(&'a str, usize)>,
+) -> Result<()> {
+    let usage = if let Some(name) = try_parse_call(line, true) {
+        name
+    } else {
+        return Ok(());
+    };
     if visited.contains(usage) {
         return Ok(());
     }
-
-    if function_usages.external_methods.contains_key(usage) {
+    
+    if usage.ends_with("_inline") {
+        inline_queue.push((usage, src_idx));   
+    } else if function_usages.external_methods.contains_key(usage) {
         function_usages.using_external.insert(usage.to_string());
     } else if let Some(gshared) = function_usages.generic_proxies.get(usage) {
         gshared_queue.push(gshared.clone());
@@ -89,8 +89,7 @@ pub fn transform(
                 }
             } else if line.starts_with("inline") {
                 let words = line.split_whitespace().collect::<Vec<_>>();
-                let proxy_name =
-                    words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1];
+                let proxy_name = words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1];
                 lines.next().unwrap();
                 let line = lines.next().unwrap().trim();
                 let name_start = line.find("))").unwrap() + 2;
@@ -103,7 +102,11 @@ pub fn transform(
     }
 
     // let mut gshared_queue = function_usages.using_gshared.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-    let mut gshared_queue = function_usages.using_gshared.iter().cloned().collect::<Vec<_>>();
+    let mut gshared_queue = function_usages
+        .using_gshared
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
     let mut inline_queue = Vec::new();
     loop {
         if gshared_queue.is_empty() && inline_queue.is_empty() {
@@ -127,14 +130,14 @@ pub fn transform(
                             if line == "}" {
                                 break;
                             }
-                            if let Some(name) = try_parse_call(line, true) {
-                                dbg!(name);
-                                if name.ends_with("_inline") {
-                                    inline_queue.push((name, src_idx));
-                                } else {
-                                    process_usage(name, function_usages, &visited, &mut gshared_queue)?;
-                                }
-                            }
+                            process_line(
+                                line,
+                                src_idx,
+                                function_usages,
+                                &visited,
+                                &mut gshared_queue,
+                                &mut inline_queue,
+                            )?;
                         }
                         break;
                     }
@@ -157,13 +160,14 @@ pub fn transform(
                             if line == "}" {
                                 break;
                             }
-                            if let Some(name) = try_parse_call(line, true) {
-                                if name.ends_with("_inline") {
-                                    inline_queue.push((name, src_idx));
-                                } else {
-                                    process_usage(name, function_usages, &visited, &mut gshared_queue)?;
-                                }
-                            }
+                            process_line(
+                                line,
+                                src_idx,
+                                function_usages,
+                                &visited,
+                                &mut gshared_queue,
+                                &mut inline_queue,
+                            )?;
                         }
                         break;
                     }
@@ -174,7 +178,7 @@ pub fn transform(
 
     dbg!(&function_usages.using_external);
     dbg!(&metadata_usage_names);
-    
+
     // dbg!(&function_usages.forward_decls);
 
     Ok(())

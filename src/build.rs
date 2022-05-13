@@ -1,10 +1,10 @@
 mod clang;
 mod codegen;
 mod data;
+mod generics;
 mod invokers;
 mod metadata_usage;
 mod runtime_metadata;
-mod generics;
 
 use crate::config::{Mod, APPS, CONFIG};
 use anyhow::{bail, Context, Result};
@@ -27,17 +27,22 @@ struct FnDecl<'a> {
     return_ty: &'a str,
     name: &'a str,
     params: &'a str,
-    inline: bool
+    inline: bool,
 }
 
 impl<'a> FnDecl<'a> {
     fn try_parse(line: &'a str) -> Option<Self> {
-        let (line, inline) = if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR") {
+        let (line, inline) = if let Some(line) =
+            line.strip_prefix("IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR")
+        {
             (line, false)
         } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR") {
             (line, true)
         } else {
-            (line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?, true)
+            (
+                line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?,
+                true,
+            )
         };
 
         let param_start = line.find('(')?;
@@ -51,7 +56,7 @@ impl<'a> FnDecl<'a> {
             return_ty,
             name,
             params,
-            inline
+            inline,
         })
     }
 }
@@ -109,11 +114,6 @@ fn find_method_with_rid(
                 return Ok(i);
             }
         }
-    }
-
-    let mut method_count = 0;
-    for type_def in &metadata.type_definitions[offset_len(image.type_start, image.type_count)] {
-        method_count += type_def.method_count;
     }
 
     bail!("could not find method with rid {}", rid);
@@ -243,7 +243,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         let file_name = if i > 0 {
             format!("{}{}", mod_config.id, i)
         } else {
-            format!("{}", mod_config.id)
+            mod_config.id.clone()
         };
         let path = Path::new(&file_name).with_extension("cpp");
         let src_path = cpp_path.join(&path);
