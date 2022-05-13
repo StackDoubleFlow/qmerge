@@ -4,21 +4,22 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
+use std::str::Lines;
 
 use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
 
 // TODO: Figure out lifetimes for strings and use string slices for maps
 #[derive(Default)]
-pub struct ModFunctionUsages {
+pub struct ModFunctionUsages<'a> {
     // Mapping from name to method def metadata idx
-    pub external_methods: HashMap<String, usize>,
-    pub forward_decls: HashMap<String, String>,
-    pub generic_proxies: HashMap<String, String>,
+    pub external_methods: HashMap<&'a str, usize>,
+    pub forward_decls: HashMap<&'a str, &'a str>,
+    pub generic_proxies: HashMap<&'a str, &'a str>,
 
     // Usages of the module sources, not from generic sources
-    pub using_gshared: HashSet<String>,
-    pub using_external: HashSet<String>,
+    pub using_gshared: HashSet<&'a str>,
+    pub using_external: HashSet<&'a str>,
 
     pub required_invokers: Vec<usize>,
     pub invokers_map: HashMap<usize, usize>,
@@ -30,13 +31,13 @@ pub struct ModFunctionUsages {
     pub generic_adj_thunk_map: HashMap<usize, usize>,
 }
 
-impl ModFunctionUsages {
-    pub fn process_function_usage(&mut self, usage: &str) -> Result<()> {
+impl<'a> ModFunctionUsages<'a> {
+    pub fn process_function_usage(&mut self, usage: &'a str) -> Result<()> {
         if self.external_methods.contains_key(usage) {
-            self.using_external.insert(usage.to_string());
+            self.using_external.insert(usage);
         } else if let Some(gshared) = self.generic_proxies.get(usage) {
             if !self.using_gshared.contains(gshared) {
-                self.using_gshared.insert(gshared.to_string());
+                self.using_gshared.insert(gshared);
             }
         } else {
             bail!("unable to handle function usage: {}", usage);
@@ -45,12 +46,22 @@ impl ModFunctionUsages {
         Ok(())
     }
 
-    pub fn process_function_usages(&mut self, usages: HashSet<String>) -> Result<()> {
+    pub fn process_function_usages(&mut self, usages: HashSet<&'a str>) -> Result<()> {
         for usage in &usages {
             self.process_function_usage(usage)?;
         }
 
         Ok(())
+    }
+
+    pub fn read_gshared_proxy(&mut self, line: &'a str, lines: &mut Lines<'a>) {
+        let words = line.split_whitespace().collect::<Vec<_>>();
+        let proxy_name = words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1];
+        lines.next().unwrap();
+        let line = lines.next().unwrap().trim();
+        let name_start = line.find("))").unwrap() + 2;
+        let name = line[name_start..].split(')').next().unwrap();
+        self.generic_proxies.insert(proxy_name, name);
     }
 
     pub fn write_external(

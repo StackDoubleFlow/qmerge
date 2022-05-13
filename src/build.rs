@@ -88,7 +88,7 @@ pub fn try_parse_call(line: &str, include_inline: bool) -> Option<&str> {
     None
 }
 
-fn get_function_usages(usages: &mut HashSet<String>, lines: &mut Lines) {
+fn get_function_usages<'a>(usages: &mut HashSet<&'a str>, lines: &mut Lines<'a>) {
     loop {
         let line = lines.next().unwrap();
         if line == "}" {
@@ -96,7 +96,7 @@ fn get_function_usages(usages: &mut HashSet<String>, lines: &mut Lines) {
         }
         if let Some(name) = try_parse_call(line, false) {
             if !usages.contains(name) {
-                usages.insert(name.to_owned());
+                usages.insert(name);
             }
         }
     }
@@ -127,6 +127,22 @@ fn find_image<'md>(metadata: &'md Metadata, find_name: &str) -> Result<&'md Il2C
         }
     }
     bail!("could not find image: {}", find_name);
+}
+
+fn get_numbered_paths(source_paths: &mut Vec<String>, cpp_path: &Path, name: &str) {
+    for i in 0.. {
+        let name = if i > 0 {
+            format!("{}{}", name, i)
+        } else {
+            name.to_string()
+        };
+        let path = cpp_path.join(&name).with_extension("cpp");
+        if path.exists() {
+            source_paths.push(name);
+        } else {
+            break;
+        }
+    }
 }
 
 pub fn build(regen_cpp: bool) -> Result<()> {
@@ -219,12 +235,20 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     )
     .context("error transforming codegen")?;
 
+    let mut codegen_source_names = Vec::new();
+    get_numbered_paths(&mut codegen_source_names, cpp_path, &mod_config.id);
+    let mut codegen_sources = Vec::new();
     for assembly in &metadata.assemblies {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
         let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
             .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
-        let method_pointers = codegen::get_methods(&code_gen_src)?;
-        let image = &metadata.images[assembly.image_index as usize];
+        codegen_sources.push((assembly.image_index, code_gen_src))
+    }
+
+    // Populate list of all external method pointers by reading CodeGen.c for all modules except the mod's
+    for (image_idx, src) in &codegen_sources {
+        let image = &metadata.images[*image_idx as usize];
+        let method_pointers = codegen::get_methods(&src)?;
 
         for (idx, method_pointer) in method_pointers.iter().enumerate() {
             if let Some(method_pointer) = method_pointer {
@@ -232,62 +256,62 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                     find_method_with_rid(data_builder.metadata, image, idx as u32 + 1)?;
                 function_usages
                     .external_methods
-                    .insert(method_pointer.to_string(), method_idx);
+                    .insert(method_pointer, method_idx);
             }
         }
     }
 
+    let mut mod_source_names = Vec::new();
+    get_numbered_paths(&mut mod_source_names, cpp_path, &mod_config.id);
+    let mut mod_sources = Vec::new();
+    for name in &mod_source_names {
+        let src_path = cpp_path.join(name).with_extension("cpp");
+        let new_path = transformed_path.join(name).with_extension("cpp");
+        fs::copy(&src_path, &new_path)?;
+        mod_sources.push(fs::read_to_string(src_path)?);
+    }
+
     let mut metadata_usage_names = HashSet::new();
     let mut mod_usages = HashSet::new();
-    for i in 0.. {
-        let file_name = if i > 0 {
-            format!("{}{}", mod_config.id, i)
-        } else {
-            mod_config.id.clone()
-        };
-        let path = Path::new(&file_name).with_extension("cpp");
-        let src_path = cpp_path.join(&path);
-        if src_path.exists() {
-            let new_path = transformed_path.join(path);
-            fs::copy(&src_path, &new_path)?;
-            compile_command.add_source(new_path);
-            let main_source = fs::read_to_string(src_path)?;
-            let mut lines = main_source.lines();
-            while let Some(line) = lines.next() {
-                if let Some(fn_def) = FnDecl::try_parse(line) {
-                    if line.ends_with(';') {
-                        function_usages.forward_decls.insert(
-                            fn_def.name.to_string(),
-                            line.trim_end_matches(';').to_string(),
-                        );
-                    } else {
-                        lines.next().unwrap();
-                        if fn_def.inline {
-                            metadata_usage_names.insert(fn_def.name.to_string() + &file_name);
-                        } else {
-                            metadata_usage_names.insert(fn_def.name.to_string());
-                        }
-                        get_function_usages(&mut mod_usages, &mut lines);
-                    }
-                } else if line.starts_with("inline") {
-                    let words = line.split_whitespace().collect::<Vec<_>>();
-                    let proxy_name =
-                        words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1];
-                    lines.next().unwrap();
-                    let line = lines.next().unwrap().trim();
-                    let name_start = line.find("))").unwrap() + 2;
-                    let name = line[name_start..].split(')').next().unwrap();
+    for (src_name, src) in mod_source_names.iter().zip(mod_sources.iter()) {
+        let mut lines = src.lines();
+        while let Some(line) = lines.next() {
+            if let Some(fn_def) = FnDecl::try_parse(line) {
+                if line.ends_with(';') {
                     function_usages
-                        .generic_proxies
-                        .insert(proxy_name.to_string(), name.to_string());
+                        .forward_decls
+                        .insert(fn_def.name, line.trim_end_matches(';'));
+                } else {
+                    lines.next().unwrap();
+                    if fn_def.inline {
+                        metadata_usage_names.insert(fn_def.name.to_string() + src_name);
+                    } else {
+                        metadata_usage_names.insert(fn_def.name.to_string());
+                    }
+                    get_function_usages(&mut mod_usages, &mut lines);
                 }
+            } else if line.starts_with("inline") {
+                function_usages.read_gshared_proxy(line, &mut lines);
             }
-        } else {
-            break;
         }
     }
     function_usages.process_function_usages(mod_usages)?;
-    generics::transform(cpp_path, &mut function_usages, &mut metadata_usage_names)?;
+
+    let mut generic_source_names = Vec::new();
+    get_numbered_paths(&mut generic_source_names, cpp_path, "GenericMethods");
+    get_numbered_paths(&mut generic_source_names, cpp_path, "Generics");
+
+    let mut generic_sources = Vec::new();
+    for name in &generic_source_names {
+        let path = cpp_path.join(name).with_extension("cpp");
+        generic_sources.push(fs::read_to_string(path)?);
+    }
+    generics::transform(
+        &mut function_usages,
+        &mut metadata_usage_names,
+        &generic_source_names,
+        &generic_sources,
+    )?;
 
     metadata_usage::transform(
         &mut compile_command,
@@ -317,7 +341,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         out_path.join(format!("{}.mmd", mod_config.id)),
         mod_data.serialize()?,
     )?;
-    compile_command.run()?;
+    // compile_command.run()?;
 
     Ok(())
 }
