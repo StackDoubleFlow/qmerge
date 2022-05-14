@@ -1,3 +1,28 @@
+pub fn is_included_ty(name: &str) -> bool {
+    matches!(
+        name,
+        "void"
+            | "bool"
+            | "float"
+            | "double"
+            | "int8_t"
+            | "uint8_t"
+            | "Il2CppChar"
+            | "int16_t"
+            | "uint16_t"
+            | "int32_t"
+            | "uint32_t"
+            | "int64_t"
+            | "uint64_t"
+            | "intptr_t"
+            | "uintptr_t"
+            | "char"
+            | "wchar_t"
+            | "RuntimeObject"
+            | "RuntimeMethod"
+    )
+}
+
 pub fn is_struct_name(name: &str) -> bool {
     let len = name.len();
     name.len() > 42

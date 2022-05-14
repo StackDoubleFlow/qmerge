@@ -10,18 +10,17 @@ mod runtime_metadata;
 use crate::config::{Mod, APPS, CONFIG};
 use anyhow::{bail, Context, Result};
 use clang::CompileCommand;
-use data::{get_str, offset_len, ModDataBuilder};
+use data::{get_str, offset_len, ModDataBuilder, RuntimeMetadata};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
+use invokers::ModFunctionUsages;
+use parser::{is_included_ty, is_struct_name, try_parse_call, FnDecl};
+use runtime_metadata::TypeDefinitionsFile;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
-
-use self::data::RuntimeMetadata;
-use self::invokers::ModFunctionUsages;
-use self::parser::{is_struct_name, try_parse_call, FnDecl};
-use self::runtime_metadata::TypeDefinitionsFile;
 
 const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
 
@@ -79,6 +78,33 @@ fn get_numbered_paths(source_paths: &mut Vec<String>, cpp_path: &Path, name: &st
             break;
         }
     }
+}
+
+fn add_cpp_ty<'a>(
+    writer: &mut String,
+    src: &'a str,
+    struct_defs: &'a HashMap<&str, String>,
+    added_structs: &mut HashSet<&'a str>,
+) -> Result<()> {
+    let mut words = src.trim_start_matches("const ").split_whitespace();
+    let ty = words.next().unwrap().trim_end_matches('*');
+    if !is_included_ty(ty) && !added_structs.contains(ty) {
+        if src.contains('*') {
+            writeln!(writer, "struct {};", ty)?;
+        } else {
+            let body = &struct_defs[ty];
+            for line in body.lines() {
+                if line.trim().starts_with("//") {
+                    continue;
+                }
+                add_cpp_ty(writer, line, struct_defs, added_structs)?;
+            }
+            writeln!(writer, "struct {}\n{{\n{}\n}};", ty, struct_defs[ty])?;
+        }
+        added_structs.insert(ty);
+    }
+
+    Ok(())
 }
 
 pub fn build(regen_cpp: bool) -> Result<()> {
@@ -291,6 +317,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         &mod_config.id,
         &mut data_builder,
         transformed_path,
+        &struct_defs,
     )?;
     let mod_data = data_builder.build(&mut function_usages)?;
     // dbg!(&mod_data);

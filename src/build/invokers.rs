@@ -1,12 +1,12 @@
-use crate::build::FnDecl;
+use super::clang::CompileCommand;
+use super::data::ModDataBuilder;
+use crate::build::{add_cpp_ty, FnDecl};
 use anyhow::{bail, Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 use std::str::Lines;
-use super::clang::CompileCommand;
-use super::data::ModDataBuilder;
 
 // TODO: Figure out lifetimes for strings and use string slices for maps
 #[derive(Default)]
@@ -69,20 +69,43 @@ impl<'a> ModFunctionUsages<'a> {
         mod_id: &str,
         data_builder: &mut ModDataBuilder,
         transformed_path: &Path,
+        struct_defs: &HashMap<&str, String>,
     ) -> Result<()> {
         let mut external_src = String::new();
         writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
         writeln!(external_src, "#include \"merge/codegen.h\"")?;
         writeln!(external_src)?;
 
+        let mut added_structs = HashSet::new();
+
         for external in &self.using_external {
             let orig_idx = self.external_methods[external];
             let idx = data_builder.add_method(orig_idx as u32)?;
             let decl = &self.forward_decls[external];
             let fn_def = FnDecl::try_parse(decl).unwrap();
+            add_cpp_ty(
+                &mut external_src,
+                fn_def.return_ty,
+                struct_defs,
+                &mut added_structs,
+            )?;
 
-            let params = fn_def.params.trim_start_matches('(').trim_end_matches(')');
-            let params: Vec<String> = params
+            let mut params = Vec::new();
+            for param in fn_def
+                .params
+                .trim_start_matches('(')
+                .trim_end_matches(')')
+                .split(", ")
+            {
+                add_cpp_ty(&mut external_src, param, struct_defs, &mut added_structs)?;
+                let words = param.trim_start_matches("const ").split_whitespace();
+                params.push(words.last().unwrap().to_string());
+            }
+
+            let params: Vec<String> = fn_def
+                .params
+                .trim_start_matches('(')
+                .trim_end_matches(')')
                 .split(',')
                 .map(|param| param.split_whitespace().last())
                 .collect::<Option<Vec<&str>>>()
