@@ -5,6 +5,7 @@ namespace MergeExample
         static T TestGenerics<T>(T a, T b) {
             System.Type type = typeof(T);
             b = a;
+            int c = new Plugin().TestThings(1, 1);
             return a;
         }
 

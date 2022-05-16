@@ -29,8 +29,11 @@ fn process_line<'a>(
         inline_queue.push((usage, src_idx));
     } else if function_usages.external_methods.contains_key(usage) {
         function_usages.using_external.insert(usage);
+        function_usages.generic_using_fns.insert(usage);
     } else if let Some(gshared) = function_usages.generic_proxies.get(usage) {
         gshared_queue.push(gshared);
+    } else if function_usages.mod_functions.contains(usage) {
+        function_usages.generic_using_fns.insert(usage);
     } else {
         bail!("unable to handle function usage: {}", usage);
     }
@@ -206,6 +209,7 @@ pub fn write(
     usage_fds: &[String],
     source_names: &[String],
     sources: &[String],
+    function_usages: &ModFunctionUsages,
 ) -> Result<()> {
     let mut external_src = String::new();
     writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
@@ -221,7 +225,7 @@ pub fn write(
     } = transform_data;
 
     // TODO: don't just add all struct definitions
-    // I need to find a way to cleanly find all struct usages of a function
+    // I should find a way to cleanly find all struct usages of a function
     for &fd in struct_fds.iter() {
         writeln!(external_src, "struct {};", fd)?;
     }
@@ -240,7 +244,11 @@ pub fn write(
         )?;
     }
     for usage_fd in usage_fds {
-        writeln!(external_src, "{}", usage_fd)?;
+        writeln!(external_src, "IL2CPP_EXTERN_C {}", usage_fd)?;
+    }
+    for &usage in &function_usages.generic_using_fns {
+        let fd = function_usages.forward_decls[usage];
+        writeln!(external_src, "{};", fd)?;
     }
     writeln!(external_src)?;
 

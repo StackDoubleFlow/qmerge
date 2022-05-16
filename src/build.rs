@@ -298,6 +298,9 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mut extern_code_source_names = Vec::new();
     for assembly in &metadata.assemblies {
         let name = get_str(metadata.string, assembly.aname.name_index as usize)?;
+        if name == mod_config.id {
+            continue;
+        }
         get_numbered_paths(&mut extern_code_source_names, cpp_path, name);
         let code_gen_src = fs::read_to_string(cpp_path.join(format!("{}_CodeGen.c", name)))
             .with_context(|| format!("error opening CodeGen.c file for module {}", name))?;
@@ -330,6 +333,16 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         mod_sources.push(fs::read_to_string(src_path)?);
     }
 
+    // TODO: populate mod_functions by using CodeGen.c
+    for src in &mod_sources {
+        for line in src.lines() {
+            if let Some(fn_def) = FnDecl::try_parse(line) {
+                if !line.ends_with(';') {
+                    function_usages.mod_functions.insert(fn_def.name);
+                }
+            }
+        }
+    }
     let mut metadata_usage_names = HashSet::new();
     let mut mod_usages = HashSet::new();
     for (src_name, src) in mod_source_names.iter().zip(mod_sources.iter()) {
@@ -396,6 +409,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         &usage_fds,
         &generic_source_names,
         &generic_sources,
+        &function_usages,
     )?;
 
     function_usages.write_external(

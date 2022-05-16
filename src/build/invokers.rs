@@ -14,12 +14,17 @@ use std::str::Lines;
 pub struct ModFunctionUsages<'a> {
     // Mapping from name to method def metadata idx
     pub external_methods: HashMap<&'a str, usize>,
+    pub mod_functions: HashSet<&'a str>,
     pub forward_decls: HashMap<&'a str, &'a str>,
     pub generic_proxies: HashMap<&'a str, &'a str>,
 
-    // Usages of the module sources, not from generic sources
+    /// Usages of the module sources, not from generic sources
     pub using_gshared: HashSet<&'a str>,
+    /// from generic and module sources
     pub using_external: HashSet<&'a str>,
+
+    /// These are from generic sources only and require fd
+    pub generic_using_fns: HashSet<&'a str>,
 
     pub required_invokers: Vec<usize>,
     pub invokers_map: HashMap<usize, usize>,
@@ -39,7 +44,7 @@ impl<'a> ModFunctionUsages<'a> {
             if !self.using_gshared.contains(gshared) {
                 self.using_gshared.insert(gshared);
             }
-        } else {
+        } else if !self.mod_functions.contains(usage) {
             bail!("unable to handle function usage: {}", usage);
         }
 
