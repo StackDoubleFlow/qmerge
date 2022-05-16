@@ -6,13 +6,14 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
+/// Returns a vec containing forward declarations for all usages
 pub fn transform(
     compile_command: &mut CompileCommand,
     cpp_path: &Path,
     transformed_path: &Path,
     data_buider: &mut ModDataBuilder,
     mod_functions: HashSet<String>,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     let src = fs::read_to_string(cpp_path.join("Il2CppMetadataUsage.c"))?;
 
     let mut required_usage_ids = Vec::new();
@@ -57,6 +58,7 @@ pub fn transform(
         using_names.insert(name);
     }
 
+    let mut usage_fds = Vec::new();
     let mut new_src = String::new();
     let mut lines = src.lines();
     while let Some(line) = lines.next() {
@@ -74,6 +76,7 @@ pub fn transform(
                 .unwrap();
             if using_names.contains(&name) {
                 writeln!(new_src, "{}", line)?;
+                usage_fds.push(line.to_string());
             }
         } else if line.starts_with("void** const g_MetadataUsages") {
             writeln!(
@@ -105,5 +108,5 @@ pub fn transform(
     fs::write(&new_path, new_src)?;
     compile_command.add_source(new_path);
 
-    Ok(())
+    Ok(usage_fds)
 }

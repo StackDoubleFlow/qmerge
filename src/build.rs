@@ -374,21 +374,28 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     }
     let (_, struct_defs) = find_struct_defs(&extern_code_sources);
 
-    generics::transform(
+    let generic_transform_data = generics::transform(
         &mut function_usages,
         &mut metadata_usage_names,
         &generic_source_names,
         &generic_sources,
-        &mut compile_command,
-        transformed_path,
     )?;
 
-    metadata_usage::transform(
+    let usage_fds = metadata_usage::transform(
         &mut compile_command,
         cpp_path,
         transformed_path,
         &mut data_builder,
         metadata_usage_names,
+    )?;
+
+    generics::write(
+        generic_transform_data,
+        transformed_path,
+        &mut compile_command,
+        &usage_fds,
+        &generic_source_names,
+        &generic_sources,
     )?;
 
     function_usages.write_external(

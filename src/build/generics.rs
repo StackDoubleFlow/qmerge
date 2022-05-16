@@ -1,6 +1,6 @@
 use super::clang::CompileCommand;
 use super::invokers::ModFunctionUsages;
-use super::{add_cpp_ty, find_struct_defs, FnDecl};
+use super::{add_cpp_ty, find_struct_defs, FnDecl, StructDef};
 use crate::build::try_parse_call;
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
@@ -76,14 +76,29 @@ fn process_fn<'a>(
     Ok(())
 }
 
+fn get_md_usage_name(fn_name: &str, source_name: &str) -> String {
+    // TODO: check metadata usage name for gshared inline
+    if let Some(fn_name) = fn_name.strip_suffix("_inline") {
+        fn_name.trim_end_matches("_gshared").to_string() + source_name
+    } else {
+        fn_name.trim_end_matches("_gshared").to_string()
+    }
+}
+
+pub struct GenericTransformData<'a> {
+    struct_fds: HashSet<&'a str>,
+    struct_defs: HashMap<&'a str, StructDef<'a>>,
+    generic_invoker_templates: HashMap<&'a str, String>,
+    def_src_map: HashMap<&'a str, usize>,
+    funcs: HashSet<&'a str>,
+}
+
 pub fn transform<'a>(
     function_usages: &mut ModFunctionUsages<'a>,
     metadata_usage_names: &mut HashSet<String>,
     source_names: &'a [String],
     sources: &'a [String],
-    compile_command: &mut CompileCommand,
-    transformed_path: &Path,
-) -> Result<()> {
+) -> Result<GenericTransformData<'a>> {
     let mut inline_functions = HashSet::new();
     let mut def_src_map = HashMap::new();
     let mut visited = HashSet::new();
@@ -121,7 +136,8 @@ pub fn transform<'a>(
         }
         while let Some(gshared) = gshared_queue.pop() {
             visited.insert(gshared);
-            metadata_usage_names.insert(gshared.trim_end_matches("_gshared").to_string());
+            // source name can be empty because this will never be inline
+            metadata_usage_names.insert(get_md_usage_name(gshared, ""));
             let src_idx = def_src_map[gshared];
             let src = &sources[src_idx];
             process_fn(
@@ -137,9 +153,7 @@ pub fn transform<'a>(
         while let Some((inline, src_idx)) = inline_queue.pop() {
             visited.insert(inline);
             let src_name = &source_names[src_idx];
-            let md_usage_name = inline.trim_end_matches("_inline").to_string() + src_name;
-            // TODO: metadata usage name for gshared inline
-            metadata_usage_names.insert(md_usage_name);
+            metadata_usage_names.insert(get_md_usage_name(inline, src_name));
             let src = &sources[src_idx];
             process_fn(
                 src,
@@ -174,14 +188,40 @@ pub fn transform<'a>(
         }
     }
 
+    let (struct_fds, struct_defs) = find_struct_defs(sources);
+
+    Ok(GenericTransformData {
+        struct_fds,
+        struct_defs,
+        generic_invoker_templates,
+        funcs: visited,
+        def_src_map,
+    })
+}
+
+pub fn write(
+    transform_data: GenericTransformData,
+    transformed_path: &Path,
+    compile_command: &mut CompileCommand,
+    usage_fds: &[String],
+    source_names: &[String],
+    sources: &[String],
+) -> Result<()> {
     let mut external_src = String::new();
     writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
     writeln!(external_src, "#include \"merge/codegen.h\"")?;
     writeln!(external_src)?;
 
+    let GenericTransformData {
+        struct_defs,
+        mut struct_fds,
+        generic_invoker_templates,
+        funcs,
+        def_src_map,
+    } = transform_data;
+
     // TODO: don't just add all struct definitions
     // I need to find a way to cleanly find all struct usages of a function
-    let (mut struct_fds, struct_defs) = find_struct_defs(sources);
     for &fd in struct_fds.iter() {
         writeln!(external_src, "struct {};", fd)?;
     }
@@ -199,6 +239,9 @@ pub fn transform<'a>(
             &mut added_structs,
         )?;
     }
+    for usage_fd in usage_fds {
+        writeln!(external_src, "{}", usage_fd)?;
+    }
     writeln!(external_src)?;
 
     for src in sources {
@@ -208,23 +251,13 @@ pub fn transform<'a>(
                 continue;
             }
             if let Some(fn_def) = FnDecl::try_parse(line) {
-                if visited.contains(fn_def.name) {
-                    // add_cpp_ty(
-                    //     &mut external_src,
-                    //     fn_def.return_ty,
-                    //     struct_defs,
-                    //     &mut added_structs,
-                    // )?;
-
-                    // for param in fn_def
-                    //     .params
-                    //     .trim_start_matches('(')
-                    //     .trim_end_matches(')')
-                    //     .split(", ")
-                    // {
-                    //     add_cpp_ty(&mut external_src, param, struct_defs, &mut added_structs)?;
-                    // }
-
+                if funcs.contains(fn_def.name) {
+                    let source_name = &source_names[def_src_map[fn_def.name]];
+                    writeln!(
+                        external_src,
+                        "IL2CPP_EXTERN_C const uint32_t {}_MetadataUsageId;",
+                        get_md_usage_name(fn_def.name, source_name)
+                    )?;
                     writeln!(external_src, "{}", line)?;
                     loop {
                         let line = lines.next().unwrap();
