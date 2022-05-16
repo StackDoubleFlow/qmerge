@@ -593,8 +593,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let ty = (encoded_idx & 0xE0000000) >> 29;
         let idx = encoded_idx & 0x1FFFFFFF;
         Ok(match ty {
-            1 => EncodedMethodIndex::Il2CppClass(self.add_type_def(idx)?),
-            2 => EncodedMethodIndex::Il2CppType(self.add_type(idx, ctx)?),
+            1 | 2 => EncodedMethodIndex::Il2CppType(self.add_type(idx, ctx)?),
             3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
             5 => EncodedMethodIndex::StringLiteral(self.add_string_literal(idx)?),
             6 => EncodedMethodIndex::MethodRef(self.add_generic_method(idx)?),

@@ -115,7 +115,7 @@ pub struct AddedProperty {
 
 #[derive(Encode, Decode, Debug, Clone, Copy)]
 pub enum EncodedMethodIndex {
-    Il2CppClass(TypeDefDescriptionIdx),
+    Il2CppClass(TypeDescriptionIdx),
     Il2CppType(TypeDescriptionIdx),
     MethodInfo(MethodDescriptionIdx),
     StringLiteral(StringLiteralIdx),
