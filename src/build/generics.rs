@@ -1,6 +1,6 @@
 use super::clang::CompileCommand;
 use super::invokers::ModFunctionUsages;
-use super::{add_cpp_ty, find_struct_defs, FnDecl, StructDef};
+use super::{add_cpp_ty, find_struct_defs, FnDecl};
 use crate::build::try_parse_call;
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
