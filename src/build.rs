@@ -13,7 +13,7 @@ use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder, RuntimeMetadata};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use invokers::ModFunctionUsages;
-use parser::{is_included_ty, is_struct_name, try_parse_call, FnDecl};
+use parser::{is_included_ty, try_parse_call, FnDecl};
 use runtime_metadata::TypeDefinitionsFile;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -80,28 +80,123 @@ fn get_numbered_paths(source_paths: &mut Vec<String>, cpp_path: &Path, name: &st
     }
 }
 
+pub struct StructDef<'src> {
+    body: String,
+    parent: Option<&'src str>,
+}
+
+fn find_struct_defs(sources: &[String]) -> (HashSet<&str>, HashMap<&str, StructDef>) {
+    let mut struct_fds = HashSet::new();
+    let mut struct_defs = HashMap::new();
+    for src in sources {
+        let mut lines = src.lines();
+        while let Some(line) = lines.next() {
+            let line = line.trim_end();
+
+            let name = if let Some(name) = line.strip_prefix("struct ") {
+                name
+            } else {
+                continue;
+            };
+            if let Some(name) = name.strip_suffix(';') {
+                struct_fds.insert(name);
+            } else {
+                let without_generic = name
+                    .trim_start_matches("Generic")
+                    .trim_start_matches("Virt")
+                    .trim_start_matches("Interface");
+                if without_generic.starts_with("FuncInvoker")
+                    || without_generic.starts_with("ActionInvoker")
+                {
+                    continue;
+                }
+
+                let parent = name.find(':').map(|pos| &name[pos + 9..]);
+                let name = name.split(':').next().unwrap().trim();
+                struct_defs.entry(name).or_insert_with(|| {
+                    lines.next().unwrap();
+                    let mut body = String::new();
+                    for line in lines.by_ref() {
+                        if line == "};" {
+                            break;
+                        }
+                        body.push_str(line);
+                        body.push('\n');
+                    }
+
+                    StructDef { body, parent }
+                });
+            }
+        }
+    }
+    (struct_fds, struct_defs)
+}
+
 fn add_cpp_ty<'a>(
     writer: &mut String,
     src: &'a str,
-    struct_defs: &'a HashMap<&str, String>,
+    struct_defs: &'a HashMap<&str, StructDef>,
+    fd_structs: &mut HashSet<&'a str>,
     added_structs: &mut HashSet<&'a str>,
 ) -> Result<()> {
     let mut words = src.trim_start_matches("const ").split_whitespace();
     let ty = words.next().unwrap().trim_end_matches('*');
+    if ty == "typedef" {
+        panic!()
+    }
     if !is_included_ty(ty) && !added_structs.contains(ty) {
         if src.contains('*') {
+            if fd_structs.contains(ty) {
+                return Ok(());
+            }
             writeln!(writer, "struct {};", ty)?;
+            fd_structs.insert(ty);
         } else {
-            let body = &struct_defs[ty];
-            for line in body.lines() {
-                if line.trim().starts_with("//") {
+            let struct_def = struct_defs
+                .get(ty)
+                .with_context(|| format!("could not find cpp type: {}", ty))?;
+            if let Some(parent) = struct_def.parent {
+                if parent == "MethodInfo_t" {
+                    dbg!(parent);
+                }
+                add_cpp_ty(writer, parent, struct_defs, fd_structs, added_structs)?;
+            }
+            for line in struct_def.body.lines() {
+                let line = line.trim();
+                if line.starts_with("union")
+                    || line.starts_with("struct")
+                    || line.starts_with("public:")
+                    || line.starts_with("//")
+                    || line.starts_with('#')
+                    || line.starts_with('}')
+                    || line.starts_with('{')
+                {
                     continue;
                 }
-                add_cpp_ty(writer, line, struct_defs, added_structs)?;
+                if line.is_empty() {
+                    break;
+                }
+                let line = if line.starts_with("ALIGN_FIELD") {
+                    let end = line.find(')').with_context(|| {
+                        format!("could not find end of ALIGN_FIELD in '{}'", line)
+                    })?;
+                    &line[end + 2..]
+                } else {
+                    line
+                };
+                add_cpp_ty(writer, line, struct_defs, fd_structs, added_structs)?;
             }
-            writeln!(writer, "struct {}\n{{\n{}\n}};", ty, struct_defs[ty])?;
+            if let Some(parent) = struct_def.parent {
+                writeln!(
+                    writer,
+                    "struct {} : {}\n{{\n{}}};",
+                    ty, parent, struct_def.body
+                )?;
+            } else {
+                writeln!(writer, "struct {}\n{{\n{}}};", ty, struct_def.body)?;
+            }
+            added_structs.insert(ty);
         }
-        added_structs.insert(ty);
     }
 
     Ok(())
@@ -209,33 +304,6 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         codegen_sources.push((assembly.image_index, code_gen_src))
     }
 
-    let mut extern_code_sources = Vec::new();
-    for name in extern_code_source_names {
-        let src_path = cpp_path.join(format!("{}.cpp", name));
-        extern_code_sources.push(fs::read_to_string(src_path)?);
-    }
-    let mut struct_defs = HashMap::new();
-    for src in &extern_code_sources {
-        let mut lines = src.lines();
-        while let Some(line) = lines.next() {
-            let line = line.trim_end();
-            if line.starts_with("struct") && !line.contains(':') && is_struct_name(&line[6..]) {
-                lines.next().unwrap();
-                lines.next().unwrap();
-                let mut body = String::new();
-                for line in lines.by_ref() {
-                    if line.is_empty() {
-                        break;
-                    }
-                    body.push_str(line);
-                    body.push('\n');
-                }
-                let name = &line[7..];
-                struct_defs.insert(name, body);
-            }
-        }
-    }
-
     // Populate list of all external method pointers by reading CodeGen.c for all modules except the mod's
     for (image_idx, src) in &codegen_sources {
         let image = &metadata.images[*image_idx as usize];
@@ -288,20 +356,31 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     }
     function_usages.process_function_usages(mod_usages)?;
 
+    // Read generic sources
     let mut generic_source_names = Vec::new();
     get_numbered_paths(&mut generic_source_names, cpp_path, "GenericMethods");
     get_numbered_paths(&mut generic_source_names, cpp_path, "Generics");
-
     let mut generic_sources = Vec::new();
     for name in &generic_source_names {
         let path = cpp_path.join(name).with_extension("cpp");
         generic_sources.push(fs::read_to_string(path)?);
     }
+
+    // Find all struct definitions and fds
+    let mut extern_code_sources = Vec::new();
+    for name in extern_code_source_names {
+        let src_path = cpp_path.join(format!("{}.cpp", name));
+        extern_code_sources.push(fs::read_to_string(src_path)?);
+    }
+    let (_, struct_defs) = find_struct_defs(&extern_code_sources);
+
     generics::transform(
         &mut function_usages,
         &mut metadata_usage_names,
         &generic_source_names,
         &generic_sources,
+        &mut compile_command,
+        transformed_path,
     )?;
 
     metadata_usage::transform(
@@ -333,7 +412,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         out_path.join(format!("{}.mmd", mod_config.id)),
         mod_data.serialize()?,
     )?;
-    // compile_command.run()?;
+    compile_command.run()?;
 
     Ok(())
 }

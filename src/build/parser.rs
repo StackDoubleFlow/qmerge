@@ -20,17 +20,20 @@ pub fn is_included_ty(name: &str) -> bool {
             | "wchar_t"
             | "RuntimeObject"
             | "RuntimeMethod"
+            | "RuntimeArray"
+            | "Il2CppMethodPointer"
+            | "Il2CppComObject"
     )
 }
 
-pub fn is_struct_name(name: &str) -> bool {
-    let len = name.len();
-    name.len() > 42
-        && &name[len - 42..len - 40] == "_t"
-        && name[len - 40..]
-            .chars()
-            .all(|c| ('A'..='Z').contains(&c) || ('0'..='9').contains(&c))
-}
+// pub fn is_struct_name(name: &str) -> bool {
+//     let len = name.len();
+//     name.len() > 42
+//         && &name[len - 42..len - 40] == "_t"
+//         && name[len - 40..]
+//             .chars()
+//             .all(|c| ('A'..='Z').contains(&c) || ('0'..='9').contains(&c))
+// }
 
 pub struct FnDecl<'a> {
     pub return_ty: &'a str,

@@ -52,6 +52,8 @@ impl CompileCommand {
         command
             .args(&["-target", target])
             .args(&["-shared"])
+            .arg("-Wno-missing-declarations")
+            .arg("-Wno-invalid-offsetof")
             .arg("-o")
             .arg(&self.output_path)
             .args(&self.source_files);

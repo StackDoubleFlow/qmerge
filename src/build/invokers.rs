@@ -1,5 +1,6 @@
 use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
+use super::StructDef;
 use crate::build::{add_cpp_ty, FnDecl};
 use anyhow::{bail, Context, Result};
 use std::collections::{HashMap, HashSet};
@@ -69,7 +70,7 @@ impl<'a> ModFunctionUsages<'a> {
         mod_id: &str,
         data_builder: &mut ModDataBuilder,
         transformed_path: &Path,
-        struct_defs: &HashMap<&str, String>,
+        struct_defs: &HashMap<&str, StructDef>,
     ) -> Result<()> {
         let mut external_src = String::new();
         writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
@@ -77,6 +78,7 @@ impl<'a> ModFunctionUsages<'a> {
         writeln!(external_src)?;
 
         let mut added_structs = HashSet::new();
+        let mut fd_structs = HashSet::new();
 
         for external in &self.using_external {
             let orig_idx = self.external_methods[external];
@@ -87,6 +89,7 @@ impl<'a> ModFunctionUsages<'a> {
                 &mut external_src,
                 fn_def.return_ty,
                 struct_defs,
+                &mut fd_structs,
                 &mut added_structs,
             )?;
 
@@ -97,7 +100,13 @@ impl<'a> ModFunctionUsages<'a> {
                 .trim_end_matches(')')
                 .split(", ")
             {
-                add_cpp_ty(&mut external_src, param, struct_defs, &mut added_structs)?;
+                add_cpp_ty(
+                    &mut external_src,
+                    param,
+                    struct_defs,
+                    &mut fd_structs,
+                    &mut added_structs,
+                )?;
                 let words = param.trim_start_matches("const ").split_whitespace();
                 params.push(words.last().unwrap().to_string());
             }

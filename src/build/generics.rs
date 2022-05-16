@@ -1,8 +1,12 @@
+use super::clang::CompileCommand;
 use super::invokers::ModFunctionUsages;
-use super::FnDecl;
+use super::{add_cpp_ty, find_struct_defs, FnDecl, StructDef};
 use crate::build::try_parse_call;
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
+use std::fs;
+use std::path::Path;
 
 fn process_line<'a>(
     line: &'a str,
@@ -77,6 +81,8 @@ pub fn transform<'a>(
     metadata_usage_names: &mut HashSet<String>,
     source_names: &'a [String],
     sources: &'a [String],
+    compile_command: &mut CompileCommand,
+    transformed_path: &Path,
 ) -> Result<()> {
     let mut inline_functions = HashSet::new();
     let mut def_src_map = HashMap::new();
@@ -146,6 +152,95 @@ pub fn transform<'a>(
             )?;
         }
     }
+
+    // Find all code for generic invokers
+    let mut generic_invoker_templates = HashMap::new();
+    for src in sources {
+        let mut lines = src.lines();
+        while let Some(line) = lines.next() {
+            if line.starts_with("template") {
+                let mut body = String::new();
+                writeln!(body, "{}", line)?;
+                let name = lines.next().unwrap();
+                writeln!(body, "{}", name)?;
+                for line in lines.by_ref() {
+                    writeln!(body, "{}", line)?;
+                    if line == "};" {
+                        break;
+                    }
+                }
+                generic_invoker_templates.insert(name.trim_start_matches("struct "), body);
+            }
+        }
+    }
+
+    let mut external_src = String::new();
+    writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
+    writeln!(external_src, "#include \"merge/codegen.h\"")?;
+    writeln!(external_src)?;
+
+    // TODO: don't just add all struct definitions
+    // I need to find a way to cleanly find all struct usages of a function
+    let (mut struct_fds, struct_defs) = find_struct_defs(sources);
+    for &fd in struct_fds.iter() {
+        writeln!(external_src, "struct {};", fd)?;
+    }
+    let mut added_structs = HashSet::new();
+    for (name, body) in generic_invoker_templates {
+        added_structs.insert(name);
+        writeln!(external_src, "{}", body)?;
+    }
+    for (&name, _) in struct_defs.iter() {
+        add_cpp_ty(
+            &mut external_src,
+            name,
+            &struct_defs,
+            &mut struct_fds,
+            &mut added_structs,
+        )?;
+    }
+    writeln!(external_src)?;
+
+    for src in sources {
+        let mut lines = src.lines();
+        while let Some(line) = lines.next() {
+            if line.ends_with(';') {
+                continue;
+            }
+            if let Some(fn_def) = FnDecl::try_parse(line) {
+                if visited.contains(fn_def.name) {
+                    // add_cpp_ty(
+                    //     &mut external_src,
+                    //     fn_def.return_ty,
+                    //     struct_defs,
+                    //     &mut added_structs,
+                    // )?;
+
+                    // for param in fn_def
+                    //     .params
+                    //     .trim_start_matches('(')
+                    //     .trim_end_matches(')')
+                    //     .split(", ")
+                    // {
+                    //     add_cpp_ty(&mut external_src, param, struct_defs, &mut added_structs)?;
+                    // }
+
+                    writeln!(external_src, "{}", line)?;
+                    loop {
+                        let line = lines.next().unwrap();
+                        writeln!(external_src, "{}", line)?;
+                        if line == "}" {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let new_path = transformed_path.join("MergeGeneric.cpp");
+    fs::write(&new_path, external_src)?;
+    compile_command.add_source(new_path);
 
     Ok(())
 }
