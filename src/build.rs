@@ -6,6 +6,7 @@ mod invokers;
 mod metadata_usage;
 mod parser;
 mod runtime_metadata;
+mod type_sizes;
 
 use crate::config::{Mod, APPS, CONFIG};
 use anyhow::{bail, Context, Result};
@@ -428,6 +429,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         transformed_path,
         cpp_path,
     )?;
+    type_sizes::transform(&mut compile_command, mod_image, cpp_path, transformed_path)?;
 
     fs::write(
         out_path.join(format!("{}.mmd", mod_config.id)),

@@ -51,7 +51,7 @@ impl CompileCommand {
         }
         command
             .args(&["-target", target])
-            .args(&["-shared"])
+            .args(&["-shared", "-fPIC"])
             .arg("-Wno-missing-declarations")
             .arg("-Wno-invalid-offsetof")
             .arg("-o")
