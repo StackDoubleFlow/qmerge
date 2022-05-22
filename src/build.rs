@@ -236,6 +236,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             fs::remove_dir_all(&cpp_path)?;
         }
         fs::create_dir_all(&cpp_path)?;
+        dbg!(&il2cpp_path);
         Command::new(mono_path)
             // Fix for System.ConsoleDriver type initializer
             .env("TERM", "xterm")
