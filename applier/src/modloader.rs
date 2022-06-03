@@ -3,7 +3,7 @@ use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppAssemblyNameDefinition, Il2CppEventDefinition,
     Il2CppFieldDefinition, Il2CppImageDefinition, Il2CppInterfaceOffsetPair,
     Il2CppMethodDefinition, Il2CppParameterDefinition, Il2CppPropertyDefinition,
-    Il2CppTypeDefinition, Metadata,
+    Il2CppStringLiteral, Il2CppTypeDefinition, Metadata,
 };
 use merge_data::{EncodedMethodIndex, MergeModData, TypeDescriptionData};
 use std::collections::HashMap;
@@ -53,6 +53,7 @@ pub struct ModLoader<'md> {
 
     // metadata replacements
     string: Vec<u8>,
+    string_literal_data: Vec<u8>,
 }
 
 impl<'md> ModLoader<'md> {
@@ -64,12 +65,14 @@ impl<'md> ModLoader<'md> {
             type_def_map.insert((namespace, name), i);
         }
         let string = metadata.string.to_vec();
+        let string_literal_data = metadata.string_literal_data.to_vec();
         Ok(Self {
             metadata,
             type_def_map,
             types,
 
             string,
+            string_literal_data,
         })
     }
 
@@ -84,12 +87,14 @@ impl<'md> ModLoader<'md> {
         idx
     }
 
-    pub fn load_mod(
-        &mut self,
-        metadata: &mut Metadata,
-        id: &str,
-        mod_data: &'md MergeModData,
-    ) -> Result<()> {
+    fn add_str_literal(&mut self, str: &str) -> i32 {
+        let idx = self.string.len() as i32;
+        self.string_literal_data.copy_from_slice(str.as_bytes());
+        self.string_literal_data.push(0);
+        idx
+    }
+
+    pub fn load_mod(&mut self, id: &str, mod_data: &'md MergeModData) -> Result<()> {
         // TODO: proper error handing, fix type_def_map if loading fails
         for type_def in &mod_data.added_type_defintions {
             self.type_def_map.insert(
@@ -119,6 +124,7 @@ impl<'md> ModLoader<'md> {
             let ty = Il2CppType {
                 data: match ty.data {
                     TypeDescriptionData::TypeDefIdx(idx) => type_def_refs[idx],
+                    TypeDescriptionData::TypeIdx(idx) => type_refs[idx],
                 },
                 attrs: ty.attrs,
                 ty: ty.ty,
@@ -303,11 +309,22 @@ impl<'md> ModLoader<'md> {
             }
             let vtable_start = self.metadata.vtable_methods.len();
             for &encoded_idx in &ty_def.vtable {
-                self.metadata.vtable_methods.push(match encoded_idx {
-                    EncodedMethodIndex::Il2CppClass(idx) => type_def_refs[idx] as u32 | 0x20000000,
+                let new_eidx = match encoded_idx {
+                    EncodedMethodIndex::Il2CppClass(idx) => type_refs[idx] as u32 | 0x20000000,
                     EncodedMethodIndex::Il2CppType(idx) => type_refs[idx] as u32 | 0x40000000,
                     EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
-                });
+                    EncodedMethodIndex::StringLiteral(idx) => {
+                        let literal_idx = self.metadata.string_literal_data.len();
+                        let str = &mod_data.added_string_literals[idx];
+                        self.metadata.string_literal.push(Il2CppStringLiteral {
+                            length: str.len() as u32,
+                            data_index: self.string_literal_data.len() as u32,
+                        });
+                        self.add_str_literal(str);
+                        literal_idx as u32 | 0xA0000000
+                    } // EncodedMethodIndex::MethodRef(idx) => ,
+                };
+                self.metadata.vtable_methods.push(new_eidx);
             }
 
             let i = i + ty_defs_start;
@@ -317,28 +334,30 @@ impl<'md> ModLoader<'md> {
             metadata_def.vtable_start = vtable_start as u32;
         }
 
-        metadata.assemblies.push(Il2CppAssemblyDefinition {
-            image_index: metadata.images.len() as u32,
+        let aname = Il2CppAssemblyNameDefinition {
+            name_index: self.add_str(&mod_data.added_assembly.name) as u32,
+            culture_index: self.add_str(&mod_data.added_assembly.culture) as u32,
+            public_key_index: self.add_str(&mod_data.added_assembly.public_key) as u32,
+            hash_alg: mod_data.added_assembly.hash_alg,
+            hash_len: mod_data.added_assembly.hash_len,
+            flags: mod_data.added_assembly.flags,
+            major: mod_data.added_assembly.major,
+            minor: mod_data.added_assembly.minor,
+            build: mod_data.added_assembly.build,
+            revision: mod_data.added_assembly.revision,
+            public_key_token: mod_data.added_assembly.public_key_token,
+        };
+        self.metadata.assemblies.push(Il2CppAssemblyDefinition {
+            image_index: self.metadata.images.len() as u32,
             token: mod_data.added_assembly.token,
             referenced_assembly_start: u32::MAX,
             referenced_assembly_count: 0,
-            aname: Il2CppAssemblyNameDefinition {
-                name_index: self.add_str(&mod_data.added_assembly.name) as u32,
-                culture_index: self.add_str(&mod_data.added_assembly.culture) as u32,
-                public_key_index: self.add_str(&mod_data.added_assembly.public_key) as u32,
-                hash_alg: mod_data.added_assembly.hash_alg,
-                hash_len: mod_data.added_assembly.hash_len,
-                flags: mod_data.added_assembly.flags,
-                major: mod_data.added_assembly.major,
-                minor: mod_data.added_assembly.minor,
-                build: mod_data.added_assembly.build,
-                revision: mod_data.added_assembly.revision,
-                public_key_token: mod_data.added_assembly.public_key_token,
-            },
+            aname,
         });
 
-        metadata.images.push(Il2CppImageDefinition {
-            name_index: self.add_str(&mod_data.added_image.name) as u32,
+        let image_name = self.add_str(&mod_data.added_image.name) as u32;
+        self.metadata.images.push(Il2CppImageDefinition {
+            name_index: image_name,
             assembly_index: self.metadata.assemblies.len() as u32 - 1,
 
             type_start: ty_defs_start as u32,

@@ -1,7 +1,9 @@
 #![feature(once_cell, backtrace)]
 
 mod codegen_api;
-mod modloader;
+pub mod il2cpp_types;
+// mod modloader;
+mod metadata_builder;
 mod setup;
 mod types;
 mod xref;
@@ -9,23 +11,17 @@ mod xref;
 use anyhow::Result;
 use il2cpp_metadata_raw::Metadata;
 use inline_hook::Hook;
-use modloader::ModLoader;
+// use modloader::ModLoader;
 use std::fs;
 use std::lazy::SyncLazy;
 use std::mem::transmute;
 use std::path::PathBuf;
 use tracing::info;
+use crate::metadata_builder::MetadataBuilder;
 
 fn get_mod_data_path() -> PathBuf {
     // TODO
     PathBuf::from("/sdcard/ModData/com.beatgames.beatsaber/Mods/QMerge")
-}
-
-fn get_global_metadata_path() -> PathBuf {
-    // TODO
-    PathBuf::from(
-        "/sdcard/Android/data/com.beatgames.beatsaber/files/il2cpp/Metadata/global-metadata.dat",
-    )
 }
 
 static LOAD_METADATA_HOOK: SyncLazy<Hook> = SyncLazy::new(|| {
@@ -36,25 +32,19 @@ static LOAD_METADATA_HOOK: SyncLazy<Hook> = SyncLazy::new(|| {
     }
     hook
 });
-pub extern "C" fn load_metadata(file_name: *const u8) -> *const () {
+pub extern "C" fn load_metadata(file_name: *const u8) -> *const u8 {
     let original_ptr = LOAD_METADATA_HOOK.original().unwrap();
-    let original_fn = unsafe { transmute::<_, fn(*const u8) -> *const ()>(original_ptr) };
+    let original_fn = unsafe { transmute::<_, fn(*const u8) -> *const u8>(original_ptr) };
 
     let original_metadata = original_fn(file_name);
-    info!("hook was called");
-    original_metadata
-}
+    let code_registration = xref::get_data_symbol("_ZL24s_Il2CppCodeRegistration").unwrap();
+    let metadata_registration = xref::get_data_symbol("_ZL28s_Il2CppMetadataRegistration").unwrap();
 
-fn load_mods() -> Result<()> {
-    let global_metadata_data = fs::read(get_global_metadata_path())?;
-    let global_metadata = il2cpp_metadata_raw::deserialize(&global_metadata_data)?;
-    let mod_loader = ModLoader::new(global_metadata, todo!())?;
+    let metadata_builder =
+        MetadataBuilder::new(code_registration, metadata_registration, original_metadata).unwrap();
 
-    for entry in fs::read_dir(get_mod_data_path().join("Mods"))? {
-        let mod_dir = entry?;
-    }
-
-    Ok(())
+    // TODO: Clean up original metadata
+    metadata_builder.finish()
 }
 
 #[no_mangle]

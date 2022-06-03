@@ -117,5 +117,17 @@ pub fn transform(
     fs::write(&new_path, new_src)?;
     compile_command.add_source(new_path);
 
+    // (1) OverrideInterfaceMethods: 
+    // for each method override:
+    // 1. get slot of original
+    // 2. set slot in vtable to new method
+    // 3. set slot of new method to slot of original
+    
+    // (2) SetupInterfaceMethods
+    // for each original method in interfaces
+    // 1. get slot of original (and offset with interface offset)
+    // 2. if original method hasn't already been explicitly overriden
+    // 3. 
+
     Ok(())
 }

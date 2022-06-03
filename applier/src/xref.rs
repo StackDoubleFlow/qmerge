@@ -33,6 +33,11 @@ unsafe fn load_ins(addr: *const u32) -> Result<Instruction> {
         .map_err(|err| anyhow!("decode error during xref walk: {}", err))
 }
 
+pub fn get_data_symbol<T>(name: &str) -> Result<*mut T> {
+    let symbol = get_symbol(name);
+    unsafe { std::mem::transmute(symbol) }
+}
+
 pub fn get_symbol(name: &str) -> Result<*const ()> {
     let symbol_trace = XREF_DATA
         .traces

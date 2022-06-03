@@ -43,8 +43,8 @@ Unity version | IL2CPP version | Support
 2018.3.0-2018.4.x | 24.1 | Unsupported
 2019.1.0-2019.3.6 | 24.2 | Unsupported
 2019.3.7-2019.4.14 | 24.3 | Unsupported
-2019.4.15-2019.4.20 | 24.4 | In Progress
-2019.4.21-2019.4.x | 24.5 | Unsupported
+2019.4.15-2019.4.20 | 24.4 | Unsupported
+2019.4.21-2019.4.x | 24.5 | In Progress
 2020.1.0-2020.1.10 | 24.3 | Unsupported
 2020.1.11-2020.1.17 | 24.4 | Unsupported
 2020.2.0-2020.2.3 | 27 | Unsupported
