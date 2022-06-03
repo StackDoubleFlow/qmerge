@@ -8,10 +8,9 @@ mod setup;
 mod types;
 mod xref;
 
-use crate::metadata_builder::MetadataBuilder;
 use anyhow::Result;
 use inline_hook::Hook;
-use metadata_builder::Metadata;
+use metadata_builder::{Metadata, CodeRegistrationBuilder};
 use modloader::ModLoader;
 use std::lazy::SyncLazy;
 use std::mem::transmute;
@@ -39,9 +38,13 @@ pub extern "C" fn load_metadata(file_name: *const u8) -> *const u8 {
     let code_registration = xref::get_data_symbol("_ZL24s_Il2CppCodeRegistration").unwrap();
     let metadata_registration = xref::get_data_symbol("_ZL28s_Il2CppMetadataRegistration").unwrap();
 
+    let code_registration = unsafe { CodeRegistrationBuilder::from_raw(code_registration) };
+    let metadata_registration = unsafe { CodeRegistrationBuilder::from_raw(metadata_registration) };
     let metadata = unsafe { Metadata::from_raw(original_metadata) }.unwrap();
 
     // TODO: Clean up original metadata
+    code_registration.build();
+    metadata_registration.build();
     metadata.build()
 }
 

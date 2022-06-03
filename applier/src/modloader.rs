@@ -53,10 +53,6 @@ pub struct ModLoader<'md> {
     // TODO: use string data from original metadata
     type_def_map: HashMap<(String, String), usize>,
     types: Vec<Il2CppType>,
-
-    // metadata replacements
-    string: Vec<u8>,
-    string_literal_data: Vec<u8>,
 }
 
 impl<'md> ModLoader<'md> {
@@ -73,27 +69,24 @@ impl<'md> ModLoader<'md> {
             metadata,
             type_def_map,
             types,
-
-            string,
-            string_literal_data,
         })
     }
 
     fn get_str(&self, offset: i32) -> Result<&str> {
-        get_str(&self.string, offset as usize)
+        get_str(&self.metadata.string, offset as usize)
     }
 
     fn add_str(&mut self, str: &str) -> i32 {
-        let idx = self.string.len() as i32;
-        self.string.copy_from_slice(str.as_bytes());
-        self.string.push(0);
+        let idx = self.metadata.string.len() as i32;
+        self.metadata.string.copy_from_slice(str.as_bytes());
+        self.metadata.string.push(0);
         idx
     }
 
     fn add_str_literal(&mut self, str: &str) -> i32 {
-        let idx = self.string.len() as i32;
-        self.string_literal_data.copy_from_slice(str.as_bytes());
-        self.string_literal_data.push(0);
+        let idx = self.metadata.string_literal_data.len() as i32;
+        self.metadata.string_literal_data.copy_from_slice(str.as_bytes());
+        self.metadata.string_literal_data.push(0);
         idx
     }
 

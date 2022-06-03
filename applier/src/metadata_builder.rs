@@ -32,7 +32,7 @@ macro_rules! metadata {
 
         impl Metadata {
             pub unsafe fn from_raw(original: *const u8) -> Result<Self> {
-                let header: &Il2CppGlobalMetadataHeader = unsafe { transmute(original) };
+                let header: &Il2CppGlobalMetadataHeader = &*original.cast();
                 ensure!(header.sanity == SANITY);
                 ensure!(header.version == 24);
 
@@ -49,9 +49,9 @@ macro_rules! metadata {
 
             pub fn build(self) -> *const u8 {
                 let size = size_of::<Il2CppGlobalMetadataHeader>() $(+ table_size(&self.$name))*;
-                let data: *mut u8 = Box::into_raw(vec![0u8; size].into_boxed_slice()).cast();
+                let data: *mut u8 = Box::leak(vec![0u8; size].into_boxed_slice()).as_mut_ptr();
 
-                let mut cur: *mut u8 = unsafe { data.offset(size_of::<Il2CppGlobalMetadataHeader>() as isize) };
+                let mut cur: *mut u8 = unsafe { data.add(size_of::<Il2CppGlobalMetadataHeader>()) };
 
                 $(
                     #[allow(non_snake_case)]
@@ -147,55 +147,97 @@ metadata! {
     exported_type_definitions: Vec<TypeDefinitionIndex>,
 }
 
-struct CodeRegistrationBuilder {
-    generic_method_pointers: Vec<Il2CppMethodPointer>,
-    generic_adjuster_thunks: Vec<Il2CppMethodPointer>,
-    invoker_pointers: Vec<InvokerMethod>,
-    custom_attribute_generators: Vec<CustomAttributesCacheGenerator>,
-    code_gen_modules: Vec<*const Il2CppCodeGenModule>,
+pub struct CodeRegistrationBuilder {
+    raw: *mut *const Il2CppCodeRegistration,
+
+    pub generic_method_pointers: Vec<Il2CppMethodPointer>,
+    pub generic_adjuster_thunks: Vec<Il2CppMethodPointer>,
+    pub invoker_pointers: Vec<InvokerMethod>,
+    pub custom_attribute_generators: Vec<CustomAttributesCacheGenerator>,
+    pub code_gen_modules: Vec<*const Il2CppCodeGenModule>,
 }
 
-impl CodeRegistrationBuilder {}
+impl CodeRegistrationBuilder {
+    pub unsafe fn from_raw(raw: *mut *const Il2CppCodeRegistration) -> Self {
+        let cr = &**raw;
 
-struct MetadataRegistrationBuilder {
-    generic_classes: Vec<*const Il2CppGenericClass>,
-    generic_insts: Vec<*const Il2CppGenericInst>,
-    generic_method_table: Vec<Il2CppGenericMethodFunctionsDefinitions>,
-    types: Vec<*const Il2CppType>,
-    method_specs: Vec<Il2CppMethodSpec>,
-    field_offsets: Vec<*const i32>,
-    type_definition_sizes: Vec<*const Il2CppTypeDefinitionSizes>,
-    metadata_usages: Vec<*const ()>,
-}
+        Self {
+            raw,
 
-pub struct MetadataBuilder {
-    code_registration_raw: *mut *const Il2CppCodeRegistration,
-    metadata_registration_raw: *mut *const Il2CppMetadataRegistration,
-
-    pub metadata: Metadata,
-}
-
-impl MetadataBuilder {
-    pub fn new(
-        code_registration_raw: *mut *const Il2CppCodeRegistration,
-        metadata_registration_raw: *mut *const Il2CppMetadataRegistration,
-        global_metadata: *const u8,
-    ) -> Result<Self> {
-        let header: &Il2CppGlobalMetadataHeader = unsafe { transmute(global_metadata) };
-        ensure!(header.sanity == SANITY);
-        ensure!(header.version == 24);
-
-        let metadata = unsafe { Metadata::from_raw(global_metadata, header) };
-
-        Ok(Self {
-            code_registration_raw,
-            metadata_registration_raw,
-
-            metadata,
-        })
+            generic_method_pointers: slice::from_raw_parts(cr.genericMethodPointers, cr.genericMethodPointersCount as usize).to_vec(),
+            generic_adjuster_thunks: slice::from_raw_parts(cr.genericAdjustorThunks, cr.genericMethodPointersCount as usize).to_vec(),
+            invoker_pointers: slice::from_raw_parts(cr.invokerPointers, cr.invokerPointersCount as usize).to_vec(),
+            custom_attribute_generators: slice::from_raw_parts(cr.customAttributeGenerators, cr.customAttributeCount as usize).to_vec(),
+            code_gen_modules: slice::from_raw_parts(cr.codeGenModules, cr.codeGenModulesCount as usize).to_vec(),
+        }
     }
 
-    pub fn finish(self) -> *const u8 {
-        self.metadata.build()
+    pub fn build(self) {
+        fn to_raw<T>(data: Vec<T>) -> (*const T, u32) {
+            let data = Box::leak(data.into_boxed_slice());
+            (data.as_ptr(), data.len() as u32)            
+        }
+
+        let mut cr = Box::new(unsafe { **self.raw });
+        (cr.genericMethodPointers, cr.genericMethodPointersCount) = to_raw(self.generic_method_pointers);
+        (cr.genericAdjustorThunks, _) = to_raw(self.generic_adjuster_thunks);
+        (cr.invokerPointers, cr.invokerPointersCount) = to_raw(self.invoker_pointers);
+        let ca = to_raw(self.custom_attribute_generators);
+        (cr.customAttributeGenerators, cr.customAttributeCount) = (ca.0, ca.1 as i32);
+        let cg = to_raw(self.code_gen_modules);
+        (cr.codeGenModules, cr.codeGenModulesCount) = (cg.0 as _, cg.1);
+    }
+}
+
+struct MetadataRegistrationBuilder {
+    raw: *mut *const Il2CppMetadataRegistration,
+
+    pub generic_classes: Vec<*mut Il2CppGenericClass>,
+    pub generic_insts: Vec<*const Il2CppGenericInst>,
+    pub generic_method_table: Vec<Il2CppGenericMethodFunctionsDefinitions>,
+    pub types: Vec<*const Il2CppType>,
+    pub method_specs: Vec<Il2CppMethodSpec>,
+    pub field_offsets: Vec<*const i32>,
+    pub type_definition_sizes: Vec<*const Il2CppTypeDefinitionSizes>,
+    pub metadata_usages: Vec<*mut *mut std::ffi::c_void>,
+}
+
+impl MetadataRegistrationBuilder {
+    pub unsafe fn from_raw(raw: *mut *const Il2CppMetadataRegistration) -> Self {
+        let mr = &**raw;
+
+        Self {
+            raw,
+
+            generic_classes: slice::from_raw_parts(mr.genericClasses, mr.genericClassesCount as usize).to_vec(),
+            generic_insts: slice::from_raw_parts(mr.genericInsts, mr.genericInstsCount as usize).to_vec(),
+            generic_method_table: slice::from_raw_parts(mr.genericMethodTable, mr.genericMethodTableCount as usize).to_vec(),
+            types: slice::from_raw_parts(mr.types, mr.typesCount as usize).to_vec(),
+            method_specs: slice::from_raw_parts(mr.methodSpecs, mr.methodSpecsCount as usize).to_vec(),
+            field_offsets: slice::from_raw_parts(mr.fieldOffsets, mr.fieldOffsetsCount as usize).to_vec(),
+            type_definition_sizes: slice::from_raw_parts(mr.typeDefinitionsSizes, mr.typeDefinitionsSizesCount as usize).to_vec(),
+            metadata_usages: slice::from_raw_parts(mr.metadataUsages, mr.metadataUsagesCount as usize).to_vec(),
+        }
+    }
+
+    pub fn build(self) {
+        fn to_raw<T>(data: Vec<T>) -> (*const T, i32) {
+            let data = Box::leak(data.into_boxed_slice());
+            (data.as_ptr(), data.len() as i32)
+        }
+
+        let mut mr = Box::new(unsafe { **self.raw });
+        (mr.genericClasses, mr.genericClassesCount) = to_raw(self.generic_classes);
+        (mr.genericInsts, mr.genericInstsCount) = to_raw(self.generic_insts);
+        (mr.genericMethodTable, mr.genericMethodTableCount) = to_raw(self.generic_method_table);
+        (mr.types, mr.typesCount) = to_raw(self.types);
+        (mr.methodSpecs, mr.methodSpecsCount) = to_raw(self.method_specs);
+        let fo = to_raw(self.field_offsets);
+        (mr.fieldOffsets, mr.fieldOffsetsCount) = (fo.0 as _, fo.1);
+        let tds = to_raw(self.type_definition_sizes);
+        (mr.typeDefinitionsSizes, mr.typeDefinitionsSizesCount) = (tds.0 as _, tds.1);
+        assert!(self.metadata_usages.len() <= u32::MAX as usize);
+        let mu = to_raw(self.metadata_usages);
+        (mr.metadataUsages, mr.metadataUsagesCount) = (mu.0, mu.1 as _);
     }
 }
