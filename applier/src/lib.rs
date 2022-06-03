@@ -2,22 +2,21 @@
 
 mod codegen_api;
 pub mod il2cpp_types;
-// mod modloader;
 mod metadata_builder;
+mod modloader;
 mod setup;
 mod types;
 mod xref;
 
+use crate::metadata_builder::MetadataBuilder;
 use anyhow::Result;
-use il2cpp_metadata_raw::Metadata;
 use inline_hook::Hook;
-// use modloader::ModLoader;
-use std::fs;
+use metadata_builder::Metadata;
+use modloader::ModLoader;
 use std::lazy::SyncLazy;
 use std::mem::transmute;
 use std::path::PathBuf;
 use tracing::info;
-use crate::metadata_builder::MetadataBuilder;
 
 fn get_mod_data_path() -> PathBuf {
     // TODO
@@ -40,11 +39,10 @@ pub extern "C" fn load_metadata(file_name: *const u8) -> *const u8 {
     let code_registration = xref::get_data_symbol("_ZL24s_Il2CppCodeRegistration").unwrap();
     let metadata_registration = xref::get_data_symbol("_ZL28s_Il2CppMetadataRegistration").unwrap();
 
-    let metadata_builder =
-        MetadataBuilder::new(code_registration, metadata_registration, original_metadata).unwrap();
+    let metadata = unsafe { Metadata::from_raw(original_metadata) }.unwrap();
 
     // TODO: Clean up original metadata
-    metadata_builder.finish()
+    metadata.build()
 }
 
 #[no_mangle]

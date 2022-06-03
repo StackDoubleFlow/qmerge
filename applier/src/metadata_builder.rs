@@ -31,19 +31,23 @@ macro_rules! metadata {
         }
 
         impl Metadata {
-            unsafe fn from_raw(original: *const u8, header: &Il2CppGlobalMetadataHeader) -> Self {
+            pub unsafe fn from_raw(original: *const u8) -> Result<Self> {
+                let header: &Il2CppGlobalMetadataHeader = unsafe { transmute(original) };
+                ensure!(header.sanity == SANITY);
+                ensure!(header.version == 24);
+
                 $(
                     let $name = table_from_raw(original.offset(header.$offset_name as isize), header.$count_name);
                 )*
 
-                Self {
+                Ok(Self {
                     $(
                         $name,
                     )*
-                }
+                })
             }
 
-            fn build(self) -> *const u8 {
+            pub fn build(self) -> *const u8 {
                 let size = size_of::<Il2CppGlobalMetadataHeader>() $(+ table_size(&self.$name))*;
                 let data: *mut u8 = Box::into_raw(vec![0u8; size].into_boxed_slice()).cast();
 
@@ -151,6 +155,8 @@ struct CodeRegistrationBuilder {
     code_gen_modules: Vec<*const Il2CppCodeGenModule>,
 }
 
+impl CodeRegistrationBuilder {}
+
 struct MetadataRegistrationBuilder {
     generic_classes: Vec<*const Il2CppGenericClass>,
     generic_insts: Vec<*const Il2CppGenericInst>,
@@ -166,7 +172,7 @@ pub struct MetadataBuilder {
     code_registration_raw: *mut *const Il2CppCodeRegistration,
     metadata_registration_raw: *mut *const Il2CppMetadataRegistration,
 
-    metadata: Metadata,
+    pub metadata: Metadata,
 }
 
 impl MetadataBuilder {

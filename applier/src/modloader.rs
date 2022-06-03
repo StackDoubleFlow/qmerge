@@ -1,10 +1,12 @@
+use crate::il2cpp_types::*;
+use crate::metadata_builder::{Metadata, MetadataBuilder};
 use anyhow::{bail, Context, Result};
-use il2cpp_metadata_raw::{
-    Il2CppAssemblyDefinition, Il2CppAssemblyNameDefinition, Il2CppEventDefinition,
-    Il2CppFieldDefinition, Il2CppImageDefinition, Il2CppInterfaceOffsetPair,
-    Il2CppMethodDefinition, Il2CppParameterDefinition, Il2CppPropertyDefinition,
-    Il2CppStringLiteral, Il2CppTypeDefinition, Metadata,
-};
+// use il2cpp_metadata_raw::{
+//     Il2CppAssemblyDefinition, Il2CppAssemblyNameDefinition, Il2CppEventDefinition,
+//     Il2CppFieldDefinition, Il2CppImageDefinition, Il2CppInterfaceOffsetPair,
+//     Il2CppMethodDefinition, Il2CppParameterDefinition, Il2CppPropertyDefinition,
+//     Il2CppStringLiteral, Il2CppTypeDefinition, Metadata,
+// };
 use merge_data::{EncodedMethodIndex, MergeModData, TypeDescriptionData};
 use std::collections::HashMap;
 use std::lazy::SyncLazy;
@@ -15,7 +17,7 @@ use crate::types::Il2CppType;
 
 static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
 
-pub fn offset_len(offset: u32, len: u32) -> std::ops::Range<usize> {
+pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
     if (offset as i32) < 0 {
         return 0..0;
     }
@@ -47,8 +49,9 @@ pub struct ModRefs {
 }
 
 pub struct ModLoader<'md> {
-    metadata: Metadata<'md>,
-    type_def_map: HashMap<(&'md str, &'md str), usize>,
+    metadata: &'md mut Metadata,
+    // TODO: use string data from original metadata
+    type_def_map: HashMap<(String, String), usize>,
     types: Vec<Il2CppType>,
 
     // metadata replacements
@@ -57,12 +60,12 @@ pub struct ModLoader<'md> {
 }
 
 impl<'md> ModLoader<'md> {
-    pub fn new(metadata: Metadata<'md>, types: Vec<Il2CppType>) -> Result<Self> {
+    pub fn new(metadata: &'md mut Metadata, types: Vec<Il2CppType>) -> Result<Self> {
         let mut type_def_map = HashMap::with_capacity(metadata.type_definitions.len());
         for (i, type_def) in metadata.type_definitions.iter().enumerate() {
-            let namespace = get_str(metadata.string, type_def.namespace_index as usize)?;
-            let name = get_str(metadata.string, type_def.name_index as usize)?;
-            type_def_map.insert((namespace, name), i);
+            let namespace = get_str(&metadata.string, type_def.namespaceIndex as usize)?;
+            let name = get_str(&metadata.string, type_def.nameIndex as usize)?;
+            type_def_map.insert((namespace.to_string(), name.to_string()), i);
         }
         let string = metadata.string.to_vec();
         let string_literal_data = metadata.string_literal_data.to_vec();
@@ -76,7 +79,7 @@ impl<'md> ModLoader<'md> {
         })
     }
 
-    fn get_str(&self, offset: u32) -> Result<&str> {
+    fn get_str(&self, offset: i32) -> Result<&str> {
         get_str(&self.string, offset as usize)
     }
 
@@ -94,11 +97,11 @@ impl<'md> ModLoader<'md> {
         idx
     }
 
-    pub fn load_mod(&mut self, id: &str, mod_data: &'md MergeModData) -> Result<()> {
+    pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData) -> Result<()> {
         // TODO: proper error handing, fix type_def_map if loading fails
         for type_def in &mod_data.added_type_defintions {
             self.type_def_map.insert(
-                (&type_def.namespace, &type_def.name),
+                (type_def.namespace.to_string(), type_def.name.to_string()),
                 self.type_def_map.len(),
             );
         }
@@ -108,7 +111,7 @@ impl<'md> ModLoader<'md> {
             .iter()
             .map(|desc| {
                 self.type_def_map
-                    .get(&(&desc.namespace, &desc.name))
+                    .get(&(desc.namespace.to_string(), desc.name.to_string()))
                     .cloned()
                     .with_context(|| {
                         format!(
@@ -151,8 +154,8 @@ impl<'md> ModLoader<'md> {
             for field in &ty_def.fields {
                 let name = self.add_str(&field.name);
                 self.metadata.fields.push(Il2CppFieldDefinition {
-                    name_index: name,
-                    type_index: type_refs[field.ty] as i32,
+                    nameIndex: name,
+                    typeIndex: type_refs[field.ty] as i32,
                     token: field.token,
                 });
             }
@@ -162,77 +165,77 @@ impl<'md> ModLoader<'md> {
                 for param in &method.parameters {
                     let name = self.add_str(&param.name);
                     self.metadata.parameters.push(Il2CppParameterDefinition {
-                        name_index: name,
+                        nameIndex: name,
                         token: param.token,
-                        type_index: type_refs[param.ty] as i32,
+                        typeIndex: type_refs[param.ty] as i32,
                     });
                 }
                 let name = self.add_str(&method.name);
                 self.metadata.methods.push(Il2CppMethodDefinition {
-                    name_index: name as u32,
-                    declaring_type: type_def_refs[method.declaring_type] as u32,
-                    return_type: type_refs[method.return_ty] as u32,
-                    parameter_start: params_start as u32,
+                    nameIndex: name as i32,
+                    declaringType: type_def_refs[method.declaring_type] as i32,
+                    returnType: type_refs[method.return_ty] as i32,
+                    parameterStart: params_start as i32,
                     // TODO: generics
-                    generic_container_index: u32::MAX,
+                    genericContainerIndex: -1,
                     token: method.token,
                     flags: method.flags,
                     iflags: method.iflags,
                     slot: method.slot,
-                    parameter_count: method.parameters.len() as u16,
+                    parameterCount: method.parameters.len() as u16,
                 })
             }
             let nested_types_start = self.metadata.nested_types.len();
             for &nested_ty in &ty_def.nested_types {
                 self.metadata
                     .nested_types
-                    .push(type_def_refs[nested_ty] as u32);
+                    .push(type_def_refs[nested_ty] as i32);
             }
             let interfaces_start = self.metadata.interfaces.len();
             for &interface in &ty_def.interfaces {
-                self.metadata.interfaces.push(type_refs[interface] as u32);
+                self.metadata.interfaces.push(type_refs[interface] as i32);
             }
             let interface_offsets_start = self.metadata.interface_offsets.len();
             for &(idx, offset) in &ty_def.interface_offsets {
                 self.metadata
                     .interface_offsets
                     .push(Il2CppInterfaceOffsetPair {
-                        interface_type_index: type_refs[idx] as u32,
-                        offset,
+                        interfaceTypeIndex: type_refs[idx] as i32,
+                        offset: offset as i32,
                     });
             }
 
             let namespace = self.add_str(&ty_def.namespace);
             let name = self.add_str(&ty_def.name);
             self.metadata.type_definitions.push(Il2CppTypeDefinition {
-                name_index: name as u32,
-                namespace_index: namespace as u32,
-                byval_type_index: type_refs[ty_def.byval_type] as u32,
-                byref_type_index: type_refs[ty_def.byref_type] as u32,
+                nameIndex: name as i32,
+                namespaceIndex: namespace as i32,
+                byvalTypeIndex: type_refs[ty_def.byval_type] as i32,
+                byrefTypeIndex: type_refs[ty_def.byref_type] as i32,
 
-                declaring_type_index: ty_def
+                declaringTypeIndex: ty_def
                     .declaring_type
-                    .map(|idx| type_refs[idx] as u32)
-                    .unwrap_or(u32::MAX),
-                parent_index: ty_def
+                    .map(|idx| type_refs[idx] as i32)
+                    .unwrap_or(-1),
+                parentIndex: ty_def
                     .parent_type
-                    .map(|idx| type_refs[idx] as u32)
-                    .unwrap_or(u32::MAX),
-                element_type_index: type_refs[ty_def.element_type] as u32,
+                    .map(|idx| type_refs[idx] as i32)
+                    .unwrap_or(-1),
+                elementTypeIndex: type_refs[ty_def.element_type] as i32,
 
                 // TODO: generics
-                generic_container_index: u32::MAX,
+                genericContainerIndex: -1,
 
                 flags: ty_def.flags,
 
-                field_start: fields_start as u32,
-                method_start: methods_start as u32,
-                event_start: u32::MAX,
-                property_start: u32::MAX,
-                nested_types_start: nested_types_start as u32,
-                interfaces_start: interfaces_start as u32,
-                vtable_start: u32::MAX,
-                interface_offsets_start: interface_offsets_start as u32,
+                fieldStart: fields_start as i32,
+                methodStart: methods_start as i32,
+                eventStart: -1,
+                propertyStart: -1,
+                nestedTypesStart: nested_types_start as i32,
+                interfacesStart: interfaces_start as i32,
+                vtableStart: -1,
+                interfaceOffsetsStart: interface_offsets_start as i32,
 
                 method_count: ty_def.methods.len() as u16,
                 property_count: ty_def.properties.len() as u16,
@@ -252,23 +255,23 @@ impl<'md> ModLoader<'md> {
         'mm: for method in &mod_data.method_descriptions {
             let decl_ty_idx = type_def_refs[method.defining_type];
             let ty_def = &self.metadata.type_definitions[decl_ty_idx];
-            let return_ty = type_refs[method.return_ty] as u32;
+            let return_ty = type_refs[method.return_ty] as i32;
 
-            let method_range = offset_len(ty_def.method_start, ty_def.method_count as u32);
+            let method_range = offset_len(ty_def.methodStart, ty_def.method_count as i32);
             for ty_method_idx in method_range {
                 let ty_method = &self.metadata.methods[ty_method_idx];
-                if self.get_str(ty_method.name_index)? != method.name
-                    || ty_method.return_type != return_ty
-                    || ty_method.parameter_count as usize != method.params.len()
+                if self.get_str(ty_method.nameIndex)? != method.name
+                    || ty_method.returnType != return_ty
+                    || ty_method.parameterCount as usize != method.params.len()
                 {
                     continue;
                 }
                 let params_range =
-                    offset_len(ty_method.parameter_start, ty_method.parameter_count as u32);
-                let params_match = ty_method.parameter_count == 0
+                    offset_len(ty_method.parameterStart, ty_method.parameterCount as i32);
+                let params_match = ty_method.parameterCount == 0
                     || self.metadata.parameters[params_range]
                         .iter()
-                        .map(|param| param.type_index as usize)
+                        .map(|param| param.typeIndex as usize)
                         .eq(method.params.iter().map(|&r| type_refs[r]));
                 if params_match {
                     method_refs.push(ty_method_idx);
@@ -277,8 +280,8 @@ impl<'md> ModLoader<'md> {
             }
             bail!(
                 "unresolved method reference {}.{}::{}",
-                self.get_str(ty_def.namespace_index)?,
-                self.get_str(ty_def.name_index)?,
+                self.get_str(ty_def.namespaceIndex)?,
+                self.get_str(ty_def.nameIndex)?,
                 method.name
             );
         }
@@ -288,11 +291,11 @@ impl<'md> ModLoader<'md> {
             for event in &ty_def.events {
                 let name = self.add_str(&event.name);
                 self.metadata.events.push(Il2CppEventDefinition {
-                    name_index: name as u32,
-                    type_index: type_refs[event.ty] as u32,
-                    add: method_refs[event.add] as u32,
-                    remove: method_refs[event.remove] as u32,
-                    raise: method_refs[event.raise] as u32,
+                    nameIndex: name as i32,
+                    typeIndex: type_refs[event.ty] as i32,
+                    add: method_refs[event.add] as i32,
+                    remove: method_refs[event.remove] as i32,
+                    raise: method_refs[event.raise] as i32,
                     token: event.token,
                 })
             }
@@ -300,9 +303,9 @@ impl<'md> ModLoader<'md> {
             for property in &ty_def.properties {
                 let name = self.add_str(&property.name);
                 self.metadata.properties.push(Il2CppPropertyDefinition {
-                    name_index: name as u32,
-                    get: method_refs[property.get] as u32,
-                    set: method_refs[property.set] as u32,
+                    nameIndex: name as i32,
+                    get: method_refs[property.get] as i32,
+                    set: method_refs[property.set] as i32,
                     attrs: property.attrs,
                     token: property.token,
                 })
@@ -314,65 +317,67 @@ impl<'md> ModLoader<'md> {
                     EncodedMethodIndex::Il2CppType(idx) => type_refs[idx] as u32 | 0x40000000,
                     EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
                     EncodedMethodIndex::StringLiteral(idx) => {
-                        let literal_idx = self.metadata.string_literal_data.len();
+                        let literal_idx = self.metadata.string_literal.len();
+                        let literal_data_idx = self.metadata.string_literal_data.len();
                         let str = &mod_data.added_string_literals[idx];
                         self.metadata.string_literal.push(Il2CppStringLiteral {
                             length: str.len() as u32,
-                            data_index: self.string_literal_data.len() as u32,
+                            dataIndex: literal_data_idx as i32,
                         });
                         self.add_str_literal(str);
                         literal_idx as u32 | 0xA0000000
-                    } // EncodedMethodIndex::MethodRef(idx) => ,
+                    }
+                    EncodedMethodIndex::MethodRef(idx) => todo!(),
                 };
                 self.metadata.vtable_methods.push(new_eidx);
             }
 
             let i = i + ty_defs_start;
             let metadata_def = &mut self.metadata.type_definitions[i];
-            metadata_def.event_start = events_start as u32;
-            metadata_def.property_start = properties_start as u32;
-            metadata_def.vtable_start = vtable_start as u32;
+            metadata_def.eventStart = events_start as i32;
+            metadata_def.propertyStart = properties_start as i32;
+            metadata_def.vtableStart = vtable_start as i32;
         }
 
         let aname = Il2CppAssemblyNameDefinition {
-            name_index: self.add_str(&mod_data.added_assembly.name) as u32,
-            culture_index: self.add_str(&mod_data.added_assembly.culture) as u32,
-            public_key_index: self.add_str(&mod_data.added_assembly.public_key) as u32,
+            nameIndex: self.add_str(&mod_data.added_assembly.name) as i32,
+            cultureIndex: self.add_str(&mod_data.added_assembly.culture) as i32,
+            publicKeyIndex: self.add_str(&mod_data.added_assembly.public_key) as i32,
             hash_alg: mod_data.added_assembly.hash_alg,
-            hash_len: mod_data.added_assembly.hash_len,
+            hash_len: mod_data.added_assembly.hash_len as i32,
             flags: mod_data.added_assembly.flags,
-            major: mod_data.added_assembly.major,
-            minor: mod_data.added_assembly.minor,
-            build: mod_data.added_assembly.build,
-            revision: mod_data.added_assembly.revision,
+            major: mod_data.added_assembly.major as i32,
+            minor: mod_data.added_assembly.minor as i32,
+            build: mod_data.added_assembly.build as i32,
+            revision: mod_data.added_assembly.revision as i32,
             public_key_token: mod_data.added_assembly.public_key_token,
         };
         self.metadata.assemblies.push(Il2CppAssemblyDefinition {
-            image_index: self.metadata.images.len() as u32,
+            imageIndex: self.metadata.images.len() as i32,
             token: mod_data.added_assembly.token,
-            referenced_assembly_start: u32::MAX,
-            referenced_assembly_count: 0,
+            referencedAssemblyStart: -1,
+            referencedAssemblyCount: 0,
             aname,
         });
 
-        let image_name = self.add_str(&mod_data.added_image.name) as u32;
+        let image_name = self.add_str(&mod_data.added_image.name) as i32;
         self.metadata.images.push(Il2CppImageDefinition {
-            name_index: image_name,
-            assembly_index: self.metadata.assemblies.len() as u32 - 1,
+            nameIndex: image_name,
+            assemblyIndex: self.metadata.assemblies.len() as i32 - 1,
 
-            type_start: ty_defs_start as u32,
-            type_count: mod_data.added_type_defintions.len() as u32,
+            typeStart: ty_defs_start as i32,
+            typeCount: mod_data.added_type_defintions.len() as u32,
 
-            exported_type_start: u32::MAX,
-            exported_type_count: u32::MAX,
+            exportedTypeStart: -1,
+            exportedTypeCount: 0,
 
             // TODO: is this needed?
-            entry_point_index: u32::MAX,
+            entryPointIndex: -1,
             token: mod_data.added_image.token,
 
             // TODO: custom attributes
-            custom_attribute_start: u32::MAX,
-            custom_attribute_count: u32::MAX,
+            customAttributeStart: -1,
+            customAttributeCount: 0,
         });
 
         MODS.lock().unwrap().insert(
