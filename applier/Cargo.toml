@@ -11,7 +11,6 @@ crate-type = ["cdylib"]
 [dependencies]
 merge_data = { path = "../data" }
 inline_hook = { git = "https://github.com/StackDoubleFlow/quest-hook-rs.git" }
-deku = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bad64 = "0.6"

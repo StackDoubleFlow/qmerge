@@ -1,19 +1,11 @@
 use crate::il2cpp_types::*;
-use crate::metadata_builder::{Metadata, MetadataBuilder};
+use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use anyhow::{bail, Context, Result};
-// use il2cpp_metadata_raw::{
-//     Il2CppAssemblyDefinition, Il2CppAssemblyNameDefinition, Il2CppEventDefinition,
-//     Il2CppFieldDefinition, Il2CppImageDefinition, Il2CppInterfaceOffsetPair,
-//     Il2CppMethodDefinition, Il2CppParameterDefinition, Il2CppPropertyDefinition,
-//     Il2CppStringLiteral, Il2CppTypeDefinition, Metadata,
-// };
 use merge_data::{EncodedMethodIndex, MergeModData, TypeDescriptionData};
 use std::collections::HashMap;
 use std::lazy::SyncLazy;
 use std::str;
 use std::sync::Mutex;
-
-use crate::types::Il2CppType;
 
 static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
 
@@ -50,13 +42,18 @@ pub struct ModRefs {
 
 pub struct ModLoader<'md> {
     metadata: &'md mut Metadata,
+    code_registration: &'md mut CodeRegistrationBuilder,
+    metadata_registration: &'md mut MetadataRegistrationBuilder,
     // TODO: use string data from original metadata
     type_def_map: HashMap<(String, String), usize>,
-    types: Vec<Il2CppType>,
 }
 
 impl<'md> ModLoader<'md> {
-    pub fn new(metadata: &'md mut Metadata, types: Vec<Il2CppType>) -> Result<Self> {
+    pub fn new(
+        metadata: &'md mut Metadata,
+        code_registration: &'md mut CodeRegistrationBuilder,
+        metadata_registration: &'md mut MetadataRegistrationBuilder,
+    ) -> Result<Self> {
         let mut type_def_map = HashMap::with_capacity(metadata.type_definitions.len());
         for (i, type_def) in metadata.type_definitions.iter().enumerate() {
             let namespace = get_str(&metadata.string, type_def.namespaceIndex as usize)?;
@@ -67,8 +64,9 @@ impl<'md> ModLoader<'md> {
         let string_literal_data = metadata.string_literal_data.to_vec();
         Ok(Self {
             metadata,
+            code_registration,
+            metadata_registration,
             type_def_map,
-            types,
         })
     }
 
@@ -85,7 +83,9 @@ impl<'md> ModLoader<'md> {
 
     fn add_str_literal(&mut self, str: &str) -> i32 {
         let idx = self.metadata.string_literal_data.len() as i32;
-        self.metadata.string_literal_data.copy_from_slice(str.as_bytes());
+        self.metadata
+            .string_literal_data
+            .copy_from_slice(str.as_bytes());
         self.metadata.string_literal_data.push(0);
         idx
     }
@@ -115,26 +115,48 @@ impl<'md> ModLoader<'md> {
             })
             .collect::<Result<Vec<usize>>>()?;
 
+        let mut type_ptrs = HashMap::new();
         let mut type_refs = Vec::with_capacity(mod_data.type_descriptions.len());
         for ty in &mod_data.type_descriptions {
-            let ty = Il2CppType {
-                data: match ty.data {
-                    TypeDescriptionData::TypeDefIdx(idx) => type_def_refs[idx],
-                    TypeDescriptionData::TypeIdx(idx) => type_refs[idx],
+            let data = match ty.data {
+                TypeDescriptionData::TypeDefIdx(idx) => Il2CppType__bindgen_ty_1 {
+                    klassIndex: type_def_refs[idx] as i32,
                 },
-                attrs: ty.attrs,
-                ty: ty.ty,
-                num_mods: 0,
-                byref: ty.by_ref,
-                // TODO: pinned types
-                pinned: false,
+                TypeDescriptionData::TypeIdx(idx) => Il2CppType__bindgen_ty_1 {
+                    type_: type_ptrs[&idx],
+                },
+                TypeDescriptionData::GenericParam(idx) => todo!(),
+                TypeDescriptionData::GenericClass(idx) => todo!(),
             };
+            let bitfield = Il2CppType::new_bitfield_1(
+                ty.attrs as u32,
+                ty.ty as u32,
+                0,
+                ty.by_ref as u32,
+                false as u32,
+            );
             // TODO: this is probably hella slow, use stable hashset
-            let idx = match self.types.iter().position(|t| t == &ty) {
+            let ty_idx = self
+                .metadata_registration
+                .types
+                .iter()
+                .position(|&ty| unsafe {
+                    (*ty).data.dummy == data.dummy && (*ty)._bitfield_1 == bitfield
+                });
+            let idx = match ty_idx {
                 Some(idx) => idx,
                 None => {
-                    self.types.push(ty);
-                    self.types.len() - 1
+                    let ty = Il2CppType {
+                        data,
+                        _bitfield_align_1: Default::default(),
+                        _bitfield_1: bitfield,
+                        __bindgen_padding_0: Default::default(),
+                    };
+                    let ptr = Box::leak(Box::new(ty)) as _;
+                    let idx = self.metadata_registration.types.len();
+                    type_ptrs.insert(idx, ptr);
+                    self.metadata_registration.types.push(ptr);
+                    idx
                 }
             };
             type_refs.push(idx);

@@ -18,11 +18,15 @@ pub struct TypeDefDescription {
 
 #[derive(Encode, Decode, Debug)]
 pub enum TypeDescriptionData {
+    /// for VALUETYPE and CLASS
     TypeDefIdx(TypeDefDescriptionIdx),
+    /// for PTR and SZARRAY
     TypeIdx(TypeDescriptionIdx),
     // TODO: Arrays
     // Adding the owner here could make this self referencial during link
+    /// for VAR and MVAR
     GenericParam(u16),
+    /// for GENERICINST
     GenericClass(GenericClassInstIdx),
 }
 

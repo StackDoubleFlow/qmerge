@@ -578,7 +578,6 @@ dependencies = [
  "bad64",
  "bindgen",
  "cfg-if",
- "deku",
  "dlopen",
  "inline_hook",
  "merge_data",

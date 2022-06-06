@@ -1,6 +1,6 @@
 use crate::il2cpp_types::*;
 use anyhow::{ensure, Result};
-use std::mem::{size_of, transmute};
+use std::mem::size_of;
 use std::slice;
 
 const SANITY: i32 = 0xFAB11BAFu32 as i32;
@@ -164,22 +164,43 @@ impl CodeRegistrationBuilder {
         Self {
             raw,
 
-            generic_method_pointers: slice::from_raw_parts(cr.genericMethodPointers, cr.genericMethodPointersCount as usize).to_vec(),
-            generic_adjuster_thunks: slice::from_raw_parts(cr.genericAdjustorThunks, cr.genericMethodPointersCount as usize).to_vec(),
-            invoker_pointers: slice::from_raw_parts(cr.invokerPointers, cr.invokerPointersCount as usize).to_vec(),
-            custom_attribute_generators: slice::from_raw_parts(cr.customAttributeGenerators, cr.customAttributeCount as usize).to_vec(),
-            code_gen_modules: slice::from_raw_parts(cr.codeGenModules, cr.codeGenModulesCount as usize).to_vec(),
+            generic_method_pointers: slice::from_raw_parts(
+                cr.genericMethodPointers,
+                cr.genericMethodPointersCount as usize,
+            )
+            .to_vec(),
+            generic_adjuster_thunks: slice::from_raw_parts(
+                cr.genericAdjustorThunks,
+                cr.genericMethodPointersCount as usize,
+            )
+            .to_vec(),
+            invoker_pointers: slice::from_raw_parts(
+                cr.invokerPointers,
+                cr.invokerPointersCount as usize,
+            )
+            .to_vec(),
+            custom_attribute_generators: slice::from_raw_parts(
+                cr.customAttributeGenerators,
+                cr.customAttributeCount as usize,
+            )
+            .to_vec(),
+            code_gen_modules: slice::from_raw_parts(
+                cr.codeGenModules,
+                cr.codeGenModulesCount as usize,
+            )
+            .to_vec(),
         }
     }
 
     pub fn build(self) {
         fn to_raw<T>(data: Vec<T>) -> (*const T, u32) {
             let data = Box::leak(data.into_boxed_slice());
-            (data.as_ptr(), data.len() as u32)            
+            (data.as_ptr(), data.len() as u32)
         }
 
         let mut cr = Box::new(unsafe { **self.raw });
-        (cr.genericMethodPointers, cr.genericMethodPointersCount) = to_raw(self.generic_method_pointers);
+        (cr.genericMethodPointers, cr.genericMethodPointersCount) =
+            to_raw(self.generic_method_pointers);
         (cr.genericAdjustorThunks, _) = to_raw(self.generic_adjuster_thunks);
         (cr.invokerPointers, cr.invokerPointersCount) = to_raw(self.invoker_pointers);
         let ca = to_raw(self.custom_attribute_generators);
@@ -189,7 +210,7 @@ impl CodeRegistrationBuilder {
     }
 }
 
-struct MetadataRegistrationBuilder {
+pub struct MetadataRegistrationBuilder {
     raw: *mut *const Il2CppMetadataRegistration,
 
     pub generic_classes: Vec<*mut Il2CppGenericClass>,
@@ -209,14 +230,33 @@ impl MetadataRegistrationBuilder {
         Self {
             raw,
 
-            generic_classes: slice::from_raw_parts(mr.genericClasses, mr.genericClassesCount as usize).to_vec(),
-            generic_insts: slice::from_raw_parts(mr.genericInsts, mr.genericInstsCount as usize).to_vec(),
-            generic_method_table: slice::from_raw_parts(mr.genericMethodTable, mr.genericMethodTableCount as usize).to_vec(),
+            generic_classes: slice::from_raw_parts(
+                mr.genericClasses,
+                mr.genericClassesCount as usize,
+            )
+            .to_vec(),
+            generic_insts: slice::from_raw_parts(mr.genericInsts, mr.genericInstsCount as usize)
+                .to_vec(),
+            generic_method_table: slice::from_raw_parts(
+                mr.genericMethodTable,
+                mr.genericMethodTableCount as usize,
+            )
+            .to_vec(),
             types: slice::from_raw_parts(mr.types, mr.typesCount as usize).to_vec(),
-            method_specs: slice::from_raw_parts(mr.methodSpecs, mr.methodSpecsCount as usize).to_vec(),
-            field_offsets: slice::from_raw_parts(mr.fieldOffsets, mr.fieldOffsetsCount as usize).to_vec(),
-            type_definition_sizes: slice::from_raw_parts(mr.typeDefinitionsSizes, mr.typeDefinitionsSizesCount as usize).to_vec(),
-            metadata_usages: slice::from_raw_parts(mr.metadataUsages, mr.metadataUsagesCount as usize).to_vec(),
+            method_specs: slice::from_raw_parts(mr.methodSpecs, mr.methodSpecsCount as usize)
+                .to_vec(),
+            field_offsets: slice::from_raw_parts(mr.fieldOffsets, mr.fieldOffsetsCount as usize)
+                .to_vec(),
+            type_definition_sizes: slice::from_raw_parts(
+                mr.typeDefinitionsSizes,
+                mr.typeDefinitionsSizesCount as usize,
+            )
+            .to_vec(),
+            metadata_usages: slice::from_raw_parts(
+                mr.metadataUsages,
+                mr.metadataUsagesCount as usize,
+            )
+            .to_vec(),
         }
     }
 
