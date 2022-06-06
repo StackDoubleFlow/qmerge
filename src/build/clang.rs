@@ -38,7 +38,7 @@ impl CompileCommand {
     pub fn run(&self) -> Result<()> {
         let mut clang_path = PathBuf::from(&CONFIG.ndk_path).join("toolchains/llvm/prebuilt");
         clang_path.push(NDK_HOST_TAG);
-        clang_path.push("bin/clang-12");
+        clang_path.push("bin/clang");
         #[cfg(target_os = "windows")]
         clang_path.set_extension(".exe");
 
