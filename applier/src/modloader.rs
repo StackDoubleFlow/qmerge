@@ -1,10 +1,8 @@
 use crate::il2cpp_types::*;
 use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use anyhow::{bail, Context, Result};
-use merge_data::{
-    EncodedMethodIndex, GenericContainerOwner, MergeModData,
-    TypeDescriptionData,
-};
+use dlopen::raw::Library;
+use merge_data::{EncodedMethodIndex, GenericContainerOwner, MergeModData, TypeDescriptionData};
 use std::collections::HashMap;
 use std::lazy::SyncLazy;
 use std::sync::Mutex;
@@ -34,6 +32,7 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
 }
 
 pub struct Mod {
+    lib: Library,
     refs: ModRefs,
 }
 
@@ -63,8 +62,6 @@ impl<'md> ModLoader<'md> {
             let name = get_str(&metadata.string, type_def.nameIndex as usize)?;
             type_def_map.insert((namespace.to_string(), name.to_string()), i);
         }
-        let string = metadata.string.to_vec();
-        let string_literal_data = metadata.string_literal_data.to_vec();
         Ok(Self {
             metadata,
             code_registration,
@@ -93,7 +90,7 @@ impl<'md> ModLoader<'md> {
         idx
     }
 
-    pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData) -> Result<()> {
+    pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
         // TODO: Theres a lot of code duplication in this function, especially with generic containers
         // TODO: proper error handing, fix type_def_map if loading fails
         for type_def in &mod_data.added_type_defintions {
@@ -434,8 +431,44 @@ impl<'md> ModLoader<'md> {
                         .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
                 });
         }
+        let mod_adj_thunks: *const Il2CppMethodPointer =
+            unsafe { lib.symbol("g_Il2CppGenericAdjustorThunks")? };
+        let adj_thunks_offset = self.code_registration.generic_adjustor_thunks.len();
+        for i in 0..mod_data.code_table_sizes.generic_adjustor_thunks {
+            let method_pointer = unsafe { mod_adj_thunks.add(i).read() };
+            self.code_registration
+                .generic_adjustor_thunks
+                .push(method_pointer);
+        }
+        let mod_gen_method_ptrs: *const Il2CppMethodPointer =
+            unsafe { lib.symbol("g_Il2CppGenericMethodPointers")? };
+        let gen_method_ptrs_offset = self.code_registration.generic_method_pointers.len();
+        for i in 0..mod_data.code_table_sizes.generic_method_pointers {
+            let method_pointer = unsafe { mod_gen_method_ptrs.add(i).read() };
+            self.code_registration
+                .generic_method_pointers
+                .push(method_pointer);
+        }
+        let mod_invokers: *const InvokerMethod = unsafe { lib.symbol("g_Il2CppInvokerPointers")? };
+        let invokers_offset = self.code_registration.invoker_pointers.len();
+        for i in 0..mod_data.code_table_sizes.invoker_pointers {
+            let method_pointer = unsafe { mod_invokers.add(i).read() };
+            self.code_registration.invoker_pointers.push(method_pointer);
+        }
         for gen_method_funcs in &mod_data.generic_method_funcs {
-            todo!("funcs");
+            self.metadata_registration.generic_method_table.push(
+                Il2CppGenericMethodFunctionsDefinitions {
+                    genericMethodIndex: (gen_method_funcs.generic_method + gen_method_offset)
+                        as i32,
+                    indices: Il2CppGenericMethodIndices {
+                        methodIndex: (gen_method_funcs.method_idx + gen_method_ptrs_offset) as i32,
+                        invokerIndex: (gen_method_funcs.invoker_idx + invokers_offset) as i32,
+                        adjustorThunkIndex: gen_method_funcs
+                            .adjustor_thunk_idx
+                            .map_or(-1, |idx| (idx + adj_thunks_offset) as i32),
+                    },
+                },
+            );
         }
 
         // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
@@ -562,6 +595,7 @@ impl<'md> ModLoader<'md> {
         MODS.lock().unwrap().insert(
             id.to_string(),
             Mod {
+                lib,
                 refs: ModRefs {
                     type_def_refs,
                     type_refs,

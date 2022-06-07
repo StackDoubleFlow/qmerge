@@ -209,7 +209,7 @@ pub struct GenericMethodFunctions {
 
     pub method_idx: usize,
     pub invoker_idx: usize,
-    pub adjuster_thunk_idx: Option<usize>,
+    pub adjustor_thunk_idx: Option<usize>,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -219,7 +219,16 @@ pub struct GenericClassInst {
 }
 
 #[derive(Encode, Decode, Debug)]
+pub struct CodeTableSizes {
+    pub generic_adjustor_thunks: usize,
+    pub generic_method_pointers: usize,
+    pub invoker_pointers: usize,
+}
+
+#[derive(Encode, Decode, Debug)]
 pub struct MergeModData {
+    pub code_table_sizes: CodeTableSizes,
+
     // Linkage information
     pub type_def_descriptions: Vec<TypeDefDescription>,
     pub type_descriptions: Vec<TypeDescription>,

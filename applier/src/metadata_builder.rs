@@ -150,11 +150,11 @@ metadata! {
 pub struct CodeRegistrationBuilder {
     raw: *mut *const Il2CppCodeRegistration,
 
-    pub generic_method_pointers: Vec<Il2CppMethodPointer>, // TODO
-    pub generic_adjuster_thunks: Vec<Il2CppMethodPointer>, // TODO
-    pub invoker_pointers: Vec<InvokerMethod>,              // TODO
+    pub generic_method_pointers: Vec<Il2CppMethodPointer>,
+    pub generic_adjustor_thunks: Vec<Il2CppMethodPointer>,
+    pub invoker_pointers: Vec<InvokerMethod>,
     pub custom_attribute_generators: Vec<CustomAttributesCacheGenerator>, // TODO
-    pub code_gen_modules: Vec<*const Il2CppCodeGenModule>, // TODO
+    pub code_gen_modules: Vec<*const Il2CppCodeGenModule>,                // TODO
 }
 
 impl CodeRegistrationBuilder {
@@ -169,7 +169,7 @@ impl CodeRegistrationBuilder {
                 cr.genericMethodPointersCount as usize,
             )
             .to_vec(),
-            generic_adjuster_thunks: slice::from_raw_parts(
+            generic_adjustor_thunks: slice::from_raw_parts(
                 cr.genericAdjustorThunks,
                 cr.genericMethodPointersCount as usize,
             )
@@ -201,7 +201,7 @@ impl CodeRegistrationBuilder {
         let mut cr = Box::new(unsafe { **self.raw });
         (cr.genericMethodPointers, cr.genericMethodPointersCount) =
             to_raw(self.generic_method_pointers);
-        (cr.genericAdjustorThunks, _) = to_raw(self.generic_adjuster_thunks);
+        (cr.genericAdjustorThunks, _) = to_raw(self.generic_adjustor_thunks);
         (cr.invokerPointers, cr.invokerPointersCount) = to_raw(self.invoker_pointers);
         let ca = to_raw(self.custom_attribute_generators);
         (cr.customAttributeGenerators, cr.customAttributeCount) = (ca.0, ca.1 as i32);
@@ -215,7 +215,7 @@ pub struct MetadataRegistrationBuilder {
 
     pub generic_classes: Vec<*mut Il2CppGenericClass>,
     pub generic_insts: Vec<*const Il2CppGenericInst>,
-    pub generic_method_table: Vec<Il2CppGenericMethodFunctionsDefinitions>, // TODO
+    pub generic_method_table: Vec<Il2CppGenericMethodFunctionsDefinitions>,
     pub types: Vec<*const Il2CppType>,
     pub method_specs: Vec<Il2CppMethodSpec>,
     pub field_offsets: Vec<*const i32>, // TODO

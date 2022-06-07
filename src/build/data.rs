@@ -11,9 +11,9 @@ use il2cpp_metadata_raw::{
 use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
-    AddedTypeDefinition, EncodedMethodIndex, GenericContainerOwner, GenericContext, GenericInst,
-    GenericMethodFunctions, GenericMethodInst, MergeModData, MethodDescription, TypeDefDescription,
-    TypeDescription, TypeDescriptionData,
+    AddedTypeDefinition, CodeTableSizes, EncodedMethodIndex, GenericContainerOwner, GenericContext,
+    GenericInst, GenericMethodFunctions, GenericMethodInst, MergeModData, MethodDescription,
+    TypeDefDescription, TypeDescription, TypeDescriptionData,
 };
 use std::collections::HashMap;
 use std::str;
@@ -417,7 +417,11 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         }))
     }
 
-    pub fn build(self, function_usages: &mut ModFunctionUsages) -> Result<MergeModData> {
+    pub fn build(
+        self,
+        function_usages: &mut ModFunctionUsages,
+        code_table_sizes: CodeTableSizes,
+    ) -> Result<MergeModData> {
         let ModDefinitions {
             added_assembly,
             added_image,
@@ -443,12 +447,14 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 generic_method: i,
                 method_idx: function_usages.add_generic_func(funcs.method_idx),
                 invoker_idx: function_usages.add_invoker(funcs.invoker_idx),
-                adjuster_thunk_idx: funcs
+                adjustor_thunk_idx: funcs
                     .adjustor_thunk_idx
                     .map(|idx| function_usages.add_generic_adj_thunk(idx)),
             })
         }
         Ok(MergeModData {
+            code_table_sizes,
+
             type_def_descriptions: self.type_definitions,
             type_descriptions: self.added_types,
             method_descriptions: self.methods,

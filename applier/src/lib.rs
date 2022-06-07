@@ -84,6 +84,7 @@ fn load_mods(
             &id.into_string()
                 .map_err(|str| anyhow!("{:?} is not a valid id", str))?,
             &mmd,
+            lib,
         )?;
     }
 

@@ -14,6 +14,7 @@ use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder, RuntimeMetadata};
 use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use invokers::ModFunctionUsages;
+use merge_data::CodeTableSizes;
 use parser::{is_included_ty, try_parse_call, FnDecl};
 use runtime_metadata::TypeDefinitionsFile;
 use std::collections::{HashMap, HashSet};
@@ -420,7 +421,12 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         transformed_path,
         &struct_defs,
     )?;
-    let mod_data = data_builder.build(&mut function_usages)?;
+    let code_table_sizes = CodeTableSizes {
+        generic_adjustor_thunks: function_usages.required_generic_adj_thunks.len(),
+        generic_method_pointers: function_usages.required_generic_funcs.len(),
+        invoker_pointers: function_usages.required_invokers.len(),
+    };
+    let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
     // dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(&mut compile_command, transformed_path, cpp_path)?;
