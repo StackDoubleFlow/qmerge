@@ -4,8 +4,8 @@ use anyhow::{bail, Context, Result};
 use merge_data::{EncodedMethodIndex, MergeModData, TypeDescriptionData};
 use std::collections::HashMap;
 use std::lazy::SyncLazy;
-use std::str;
 use std::sync::Mutex;
+use std::{ptr, str};
 
 static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
 
@@ -115,7 +115,8 @@ impl<'md> ModLoader<'md> {
             })
             .collect::<Result<Vec<usize>>>()?;
 
-        let mut type_ptrs = HashMap::new();
+        // Save the allocated types to fix generic classes
+        let mut added_types = Vec::new();
         let mut type_refs = Vec::with_capacity(mod_data.type_descriptions.len());
         for ty in &mod_data.type_descriptions {
             let data = match ty.data {
@@ -123,10 +124,15 @@ impl<'md> ModLoader<'md> {
                     klassIndex: type_def_refs[idx] as i32,
                 },
                 TypeDescriptionData::TypeIdx(idx) => Il2CppType__bindgen_ty_1 {
-                    type_: type_ptrs[&idx],
+                    // Types used here should be earlier in the list and already resolved
+                    type_: self.metadata_registration.types[type_refs[idx]],
                 },
                 TypeDescriptionData::GenericParam(idx) => todo!(),
-                TypeDescriptionData::GenericClass(idx) => todo!(),
+                TypeDescriptionData::GenericClass(idx) => Il2CppType__bindgen_ty_1 {
+                    // Generic classes cannot be resolved now because they require types to be resolved.
+                    // They will be fixed later, but for now we just assign their index
+                    klassIndex: idx as i32,
+                },
             };
             let bitfield = Il2CppType::new_bitfield_1(
                 ty.attrs as u32,
@@ -135,14 +141,20 @@ impl<'md> ModLoader<'md> {
                 ty.by_ref as u32,
                 false as u32,
             );
-            // TODO: this is probably hella slow, use stable hashset
-            let ty_idx = self
-                .metadata_registration
-                .types
-                .iter()
-                .position(|&ty| unsafe {
-                    (*ty).data.dummy == data.dummy && (*ty)._bitfield_1 == bitfield
-                });
+            let ty_idx = match ty.data {
+                // Generic classes aren't resolved yet and contains dummy data, so we
+                // can't search for a matching type
+                TypeDescriptionData::GenericClass(_) => None,
+
+                // TODO: this is probably hella slow, use stable hashset
+                _ => self
+                    .metadata_registration
+                    .types
+                    .iter()
+                    .position(|&ty| unsafe {
+                        (*ty).data.dummy == data.dummy && (*ty)._bitfield_1 == bitfield
+                    }),
+            };
             let idx = match ty_idx {
                 Some(idx) => idx,
                 None => {
@@ -154,12 +166,55 @@ impl<'md> ModLoader<'md> {
                     };
                     let ptr = Box::leak(Box::new(ty)) as _;
                     let idx = self.metadata_registration.types.len();
-                    type_ptrs.insert(idx, ptr);
+                    added_types.push(ptr as *mut Il2CppType);
                     self.metadata_registration.types.push(ptr);
                     idx
                 }
             };
             type_refs.push(idx);
+        }
+
+        let gen_inst_offset = self.metadata_registration.generic_insts.len();
+        for gen_inst in &mod_data.generic_instances {
+            let types: Box<[_]> = gen_inst
+                .types
+                .iter()
+                .map(|&idx| self.metadata_registration.types[idx])
+                .collect();
+
+            self.metadata_registration
+                .generic_insts
+                .push(Box::leak(Box::new(Il2CppGenericInst {
+                    type_argc: gen_inst.types.len() as u32,
+                    type_argv: Box::leak(types).as_mut_ptr(),
+                })));
+        }
+
+        let gen_class_offset = self.metadata_registration.generic_classes.len();
+        for gen_class in &mod_data.generic_class_insts {
+            self.metadata_registration
+                .generic_classes
+                .push(Box::leak(Box::new(Il2CppGenericClass {
+                    typeDefinitionIndex: type_def_refs[gen_class.class] as i32,
+                    context: Il2CppGenericContext {
+                        class_inst: gen_class.context.class.map_or(ptr::null(), |idx| {
+                            self.metadata_registration.generic_insts[idx + gen_inst_offset]
+                        }),
+                        method_inst: gen_class.context.method.map_or(ptr::null(), |idx| {
+                            self.metadata_registration.generic_insts[idx + gen_inst_offset]
+                        }),
+                    },
+                    cached_class: ptr::null_mut(),
+                })))
+        }
+        // Now that we've resolved our generic classes, we can fix our type refs
+        for type_ptr in added_types {
+            let ty = unsafe { &mut *type_ptr };
+            if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_GENERICINST {
+                let idx = unsafe { ty.data.klassIndex } as usize;
+                ty.data.generic_class =
+                    self.metadata_registration.generic_classes[idx + gen_class_offset];
+            }
         }
 
         // Fill in everything that doesn't requre method references now
@@ -301,6 +356,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
+        // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
         for (i, ty_def) in mod_data.added_type_defintions.iter().enumerate() {
             let events_start = self.metadata.events.len();
             for event in &ty_def.events {
@@ -352,6 +408,26 @@ impl<'md> ModLoader<'md> {
             metadata_def.eventStart = events_start as i32;
             metadata_def.propertyStart = properties_start as i32;
             metadata_def.vtableStart = vtable_start as i32;
+        }
+
+        let gen_method_offset = self.metadata_registration.method_specs.len();
+        for gen_method in &mod_data.generic_method_insts {
+            self.metadata_registration
+                .method_specs
+                .push(Il2CppMethodSpec {
+                    methodDefinitionIndex: method_refs[gen_method.method] as i32,
+                    classIndexIndex: gen_method
+                        .context
+                        .class
+                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
+                    methodIndexIndex: gen_method
+                        .context
+                        .method
+                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
+                });
+        }
+        for gen_method_funcs in &mod_data.generic_method_funcs {
+            todo!("funcs");
         }
 
         let aname = Il2CppAssemblyNameDefinition {

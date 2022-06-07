@@ -150,11 +150,11 @@ metadata! {
 pub struct CodeRegistrationBuilder {
     raw: *mut *const Il2CppCodeRegistration,
 
-    pub generic_method_pointers: Vec<Il2CppMethodPointer>,
-    pub generic_adjuster_thunks: Vec<Il2CppMethodPointer>,
-    pub invoker_pointers: Vec<InvokerMethod>,
-    pub custom_attribute_generators: Vec<CustomAttributesCacheGenerator>,
-    pub code_gen_modules: Vec<*const Il2CppCodeGenModule>,
+    pub generic_method_pointers: Vec<Il2CppMethodPointer>, // TODO
+    pub generic_adjuster_thunks: Vec<Il2CppMethodPointer>, // TODO
+    pub invoker_pointers: Vec<InvokerMethod>,              // TODO
+    pub custom_attribute_generators: Vec<CustomAttributesCacheGenerator>, // TODO
+    pub code_gen_modules: Vec<*const Il2CppCodeGenModule>, // TODO
 }
 
 impl CodeRegistrationBuilder {
@@ -215,12 +215,12 @@ pub struct MetadataRegistrationBuilder {
 
     pub generic_classes: Vec<*mut Il2CppGenericClass>,
     pub generic_insts: Vec<*const Il2CppGenericInst>,
-    pub generic_method_table: Vec<Il2CppGenericMethodFunctionsDefinitions>,
+    pub generic_method_table: Vec<Il2CppGenericMethodFunctionsDefinitions>, // TODO
     pub types: Vec<*const Il2CppType>,
     pub method_specs: Vec<Il2CppMethodSpec>,
-    pub field_offsets: Vec<*const i32>,
-    pub type_definition_sizes: Vec<*const Il2CppTypeDefinitionSizes>,
-    pub metadata_usages: Vec<*mut *mut std::ffi::c_void>,
+    pub field_offsets: Vec<*const i32>, // TODO
+    pub type_definition_sizes: Vec<*const Il2CppTypeDefinitionSizes>, // TODO
+    pub metadata_usages: Vec<*mut *mut std::ffi::c_void>, // TODO
 }
 
 impl MetadataRegistrationBuilder {
