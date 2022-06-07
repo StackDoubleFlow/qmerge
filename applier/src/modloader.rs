@@ -532,6 +532,7 @@ impl<'md> ModLoader<'md> {
             let encoded_data = unsafe { ty.data.dummy } as usize;
             let idx = encoded_data >> 16;
             let num = encoded_data & 0xFFFF;
+            #[allow(non_upper_case_globals)]
             let gc_idx = match ty.type_() {
                 Il2CppTypeEnum_IL2CPP_TYPE_VAR => {
                     self.metadata.type_definitions[type_def_refs[idx]].genericContainerIndex
