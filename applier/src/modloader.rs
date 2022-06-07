@@ -2,7 +2,7 @@ use crate::il2cpp_types::*;
 use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use anyhow::{bail, Context, Result};
 use merge_data::{
-    AddedGenericParameter, EncodedMethodIndex, GenericContainerOwner, MergeModData,
+    EncodedMethodIndex, GenericContainerOwner, MergeModData,
     TypeDescriptionData,
 };
 use std::collections::HashMap;
@@ -31,6 +31,16 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
     let len = strlen(data, offset);
     let str = str::from_utf8(&data[offset..offset + len])?;
     Ok(str)
+}
+
+pub struct Mod {
+    refs: ModRefs,
+}
+
+pub struct ModRefs {
+    type_def_refs: Vec<usize>,
+    type_refs: Vec<usize>,
+    method_refs: Vec<usize>,
 }
 
 pub struct ModLoader<'md> {
