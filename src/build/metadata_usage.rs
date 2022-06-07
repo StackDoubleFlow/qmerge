@@ -13,7 +13,7 @@ pub fn transform(
     transformed_path: &Path,
     data_buider: &mut ModDataBuilder,
     mod_functions: HashSet<String>,
-) -> Result<Vec<String>> {
+) -> Result<(Vec<String>, usize)> {
     let src = fs::read_to_string(cpp_path.join("Il2CppMetadataUsage.c"))?;
 
     let mut required_usage_ids = Vec::new();
@@ -108,5 +108,5 @@ pub fn transform(
     fs::write(&new_path, new_src)?;
     compile_command.add_source(new_path);
 
-    Ok(usage_fds)
+    Ok((usage_fds, new_list.len()))
 }

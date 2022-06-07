@@ -223,6 +223,7 @@ pub struct CodeTableSizes {
     pub generic_adjustor_thunks: usize,
     pub generic_method_pointers: usize,
     pub invoker_pointers: usize,
+    pub metadata_usages: usize,
 }
 
 #[derive(Encode, Decode, Debug)]

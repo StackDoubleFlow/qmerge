@@ -220,7 +220,7 @@ pub struct MetadataRegistrationBuilder {
     pub method_specs: Vec<Il2CppMethodSpec>,
     pub field_offsets: Vec<*const i32>,
     pub type_definition_sizes: Vec<*const Il2CppTypeDefinitionSizes>,
-    pub metadata_usages: Vec<*mut *mut std::ffi::c_void>, // TODO
+    pub metadata_usages: Vec<*mut *mut std::ffi::c_void>,
 }
 
 impl MetadataRegistrationBuilder {

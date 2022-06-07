@@ -396,7 +396,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         &generic_sources,
     )?;
 
-    let usage_fds = metadata_usage::transform(
+    let (usage_fds, usages_len) = metadata_usage::transform(
         &mut compile_command,
         cpp_path,
         transformed_path,
@@ -425,6 +425,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         generic_adjustor_thunks: function_usages.required_generic_adj_thunks.len(),
         generic_method_pointers: function_usages.required_generic_funcs.len(),
         invoker_pointers: function_usages.required_invokers.len(),
+        metadata_usages: usages_len
     };
     let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
     // dbg!(&mod_data);

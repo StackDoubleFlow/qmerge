@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use dlopen::raw::Library;
 use merge_data::{EncodedMethodIndex, GenericContainerOwner, MergeModData, TypeDescriptionData};
 use std::collections::HashMap;
+use std::ffi::c_void;
 use std::lazy::SyncLazy;
 use std::sync::Mutex;
 use std::{ptr, str};
@@ -610,6 +611,46 @@ impl<'md> ModLoader<'md> {
         for i in 0..mod_data.added_type_defintions.len() {
             let sizes = unsafe { type_def_sizes.add(i).read() };
             self.metadata_registration.type_definition_sizes.push(sizes);
+        }
+
+        let metadata_usages: *const *mut *mut c_void =
+            unsafe { lib.symbol("g_MetadataUsages")? };
+        let metadata_usage_offset = self.metadata_registration.metadata_usages.len();
+        for i in 0..mod_data.code_table_sizes.metadata_usages {
+            let usage = unsafe { metadata_usages.add(i).read() };
+            self.metadata_registration.metadata_usages.push(usage);
+        }
+        for usage_list in &mod_data.added_usage_lists {
+            let pairs_idx = self.metadata.metadata_usage_pairs.len();
+            self.metadata.metadata_usage_lists.push(Il2CppMetadataUsageList { 
+                start: pairs_idx as u32, 
+                count: usage_list.len() as u32,
+            });
+            for pair in usage_list {
+                let source = match pair.source {
+                    EncodedMethodIndex::Il2CppClass(idx) => type_refs[idx] as u32 | 0x20000000,
+                    EncodedMethodIndex::Il2CppType(idx) => type_refs[idx] as u32 | 0x40000000,
+                    EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
+                    EncodedMethodIndex::StringLiteral(idx) => {
+                        let literal_idx = self.metadata.string_literal.len();
+                        let literal_data_idx = self.metadata.string_literal_data.len();
+                        let str = &mod_data.added_string_literals[idx];
+                        self.metadata.string_literal.push(Il2CppStringLiteral {
+                            length: str.len() as u32,
+                            dataIndex: literal_data_idx as i32,
+                        });
+                        self.add_str_literal(str);
+                        literal_idx as u32 | 0xA0000000
+                    }
+                    EncodedMethodIndex::MethodRef(idx) => {
+                        (idx + gen_method_offset) as u32 | 0xC0000000
+                    }
+                };
+                self.metadata.metadata_usage_pairs.push(Il2CppMetadataUsagePair {
+                    encodedSourceIndex: source,
+                    destinationIndex: (pair.dest + metadata_usage_offset) as u32
+                })
+            }
         }
 
         MODS.lock().unwrap().insert(
