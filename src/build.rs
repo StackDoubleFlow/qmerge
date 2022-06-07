@@ -332,6 +332,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         let src_path = cpp_path.join(name).with_extension("cpp");
         let new_path = transformed_path.join(name).with_extension("cpp");
         fs::copy(&src_path, &new_path)?;
+        compile_command.add_source(new_path);
         mod_sources.push(fs::read_to_string(src_path)?);
     }
 
