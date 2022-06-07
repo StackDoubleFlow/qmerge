@@ -593,6 +593,25 @@ impl<'md> ModLoader<'md> {
             customAttributeCount: 0,
         });
 
+        let code_gen_module: *const Il2CppCodeGenModule =
+            unsafe { lib.symbol(&format!("g_{}CodeGenModule", id))? };
+        self.code_registration
+            .code_gen_modules
+            .push(code_gen_module);
+
+        let field_offset_table: *const *const i32 = unsafe { lib.symbol("g_FieldOffsetTable")? };
+        for i in 0..mod_data.added_type_defintions.len() {
+            let offsets = unsafe { field_offset_table.add(i).read() };
+            self.metadata_registration.field_offsets.push(offsets);
+        }
+
+        let type_def_sizes: *const *const Il2CppTypeDefinitionSizes =
+            unsafe { lib.symbol("g_Il2CppTypeDefinitionSizesTable")? };
+        for i in 0..mod_data.added_type_defintions.len() {
+            let sizes = unsafe { type_def_sizes.add(i).read() };
+            self.metadata_registration.type_definition_sizes.push(sizes);
+        }
+
         MODS.lock().unwrap().insert(
             id.to_string(),
             Mod {
