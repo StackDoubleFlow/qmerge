@@ -24,6 +24,11 @@ fn get_mod_data_path() -> PathBuf {
     PathBuf::from("/sdcard/ModData/com.beatgames.beatsaber/Mods/QMerge")
 }
 
+fn get_exec_path() -> PathBuf {
+    // TODO
+    PathBuf::from("/data/data/com.beatgames.beatsaber")
+}
+
 static LOAD_METADATA_HOOK: SyncLazy<Hook> = SyncLazy::new(|| {
     let addr = xref::get_symbol("_ZN6il2cpp2vm14MetadataLoader16LoadMetadataFileEPKc").unwrap();
     let hook = Hook::new();
@@ -77,7 +82,9 @@ fn load_mods(
         debug!("{:?}", mmd);
 
         file_path.set_extension("so");
-        let lib = Library::open(file_path).context("failed to open mod executable")?;
+        let so_path = get_exec_path().join(file_path.file_name().unwrap());
+        fs::copy(file_path, &so_path)?;
+        let lib = Library::open(so_path).context("failed to open mod executable")?;
 
         // let so = fs::read(&file_path).context("could not read mod executable")?;
         modloader.load_mod(

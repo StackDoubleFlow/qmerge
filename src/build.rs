@@ -425,7 +425,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         generic_adjustor_thunks: function_usages.required_generic_adj_thunks.len(),
         generic_method_pointers: function_usages.required_generic_funcs.len(),
         invoker_pointers: function_usages.required_invokers.len(),
-        metadata_usages: usages_len
+        metadata_usages: usages_len,
     };
     let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
     // dbg!(&mod_data);

@@ -138,7 +138,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 name: self.get_str(param.name_index as u32)?.to_string(),
                 token: param.token,
                 ty: self.add_type(param.type_index as u32)?,
-            })
+            });
         }
 
         Ok(AddedMethod {
@@ -332,7 +332,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                         GenericContainerOwner::Class(self.add_type_def(gc.owner_index)?)
                     }
                     Il2CppTypeEnum::Mvar => {
-                        GenericContainerOwner::Method(self.add_method(gc.owner_index)?)
+                        // These get fixed up later in `fixup_types`
+                        GenericContainerOwner::Method(gc.owner_index as usize)
                     }
                     _ => bail!(
                         "Il2CppType has data type GenericParamIdx but is not a generic parameter"
@@ -417,11 +418,30 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         }))
     }
 
+    fn fixup_types(&mut self) -> Result<()> {
+        for idx in 0..self.added_types.len() {
+            let (owner, num) = match self.added_types[idx].data {
+                TypeDescriptionData::GenericParam(GenericContainerOwner::Method(owner), num) => {
+                    (owner, num)
+                }
+                _ => continue,
+            };
+            self.added_types[idx].data = TypeDescriptionData::GenericParam(
+                // We don't have to worry about this adding new types that we would have to fix up
+                // because if this generic param type is in the list, it's from a method we already added
+                GenericContainerOwner::Method(self.add_method(owner as u32)?),
+                num,
+            );
+        }
+        Ok(())
+    }
+
     pub fn build(
-        self,
+        mut self,
         function_usages: &mut ModFunctionUsages,
         code_table_sizes: CodeTableSizes,
     ) -> Result<MergeModData> {
+        self.fixup_types()?;
         let ModDefinitions {
             added_assembly,
             added_image,
