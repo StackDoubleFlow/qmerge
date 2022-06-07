@@ -33,16 +33,6 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
     Ok(str)
 }
 
-pub struct Mod {
-    refs: ModRefs,
-}
-
-pub struct ModRefs {
-    type_def_refs: Vec<usize>,
-    type_refs: Vec<usize>,
-    method_refs: Vec<usize>,
-}
-
 pub struct ModLoader<'md> {
     metadata: &'md mut Metadata,
     code_registration: &'md mut CodeRegistrationBuilder,
@@ -254,7 +244,6 @@ impl<'md> ModLoader<'md> {
                 }
                 let container_idx = if let Some(container) = &method.generic_container {
                     let idx = self.metadata.generic_containers.len();
-                    let params_start = self.metadata.generic_parameters.len();
                     for (num, param) in container.parameters.iter().enumerate() {
                         let name = self.add_str(&param.name);
                         let constraints_start = self.metadata.generic_parameter_constraints.len();
@@ -315,7 +304,6 @@ impl<'md> ModLoader<'md> {
             let ty_def_idx = self.metadata.type_definitions.len();
             let container_idx = if let Some(container) = &ty_def.generic_container {
                 let idx = self.metadata.generic_containers.len();
-                let params_start = self.metadata.generic_parameters.len();
                 for (num, param) in container.parameters.iter().enumerate() {
                     let name = self.add_str(&param.name);
                     let constraints_start = self.metadata.generic_parameter_constraints.len();
@@ -358,8 +346,7 @@ impl<'md> ModLoader<'md> {
                     .unwrap_or(-1),
                 elementTypeIndex: type_refs[ty_def.element_type] as i32,
 
-                // TODO: generics
-                genericContainerIndex: -1,
+                genericContainerIndex: container_idx,
 
                 flags: ty_def.flags,
 
@@ -421,6 +408,26 @@ impl<'md> ModLoader<'md> {
             );
         }
 
+        let gen_method_offset = self.metadata_registration.method_specs.len();
+        for gen_method in &mod_data.generic_method_insts {
+            self.metadata_registration
+                .method_specs
+                .push(Il2CppMethodSpec {
+                    methodDefinitionIndex: method_refs[gen_method.method] as i32,
+                    classIndexIndex: gen_method
+                        .context
+                        .class
+                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
+                    methodIndexIndex: gen_method
+                        .context
+                        .method
+                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
+                });
+        }
+        for gen_method_funcs in &mod_data.generic_method_funcs {
+            todo!("funcs");
+        }
+
         // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
         for (i, ty_def) in mod_data.added_type_defintions.iter().enumerate() {
             let events_start = self.metadata.events.len();
@@ -463,7 +470,9 @@ impl<'md> ModLoader<'md> {
                         self.add_str_literal(str);
                         literal_idx as u32 | 0xA0000000
                     }
-                    EncodedMethodIndex::MethodRef(idx) => todo!(),
+                    EncodedMethodIndex::MethodRef(idx) => {
+                        (idx + gen_method_offset) as u32 | 0xC0000000
+                    }
                 };
                 self.metadata.vtable_methods.push(new_eidx);
             }
@@ -497,26 +506,6 @@ impl<'md> ModLoader<'md> {
                 ty.data.generic_class =
                     self.metadata_registration.generic_classes[idx + gen_class_offset];
             }
-        }
-
-        let gen_method_offset = self.metadata_registration.method_specs.len();
-        for gen_method in &mod_data.generic_method_insts {
-            self.metadata_registration
-                .method_specs
-                .push(Il2CppMethodSpec {
-                    methodDefinitionIndex: method_refs[gen_method.method] as i32,
-                    classIndexIndex: gen_method
-                        .context
-                        .class
-                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
-                    methodIndexIndex: gen_method
-                        .context
-                        .method
-                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
-                });
-        }
-        for gen_method_funcs in &mod_data.generic_method_funcs {
-            todo!("funcs");
         }
 
         let aname = Il2CppAssemblyNameDefinition {
