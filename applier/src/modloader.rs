@@ -2,7 +2,10 @@ use crate::il2cpp_types::*;
 use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use anyhow::{bail, Context, Result};
 use dlopen::raw::Library;
-use merge_data::{EncodedMethodIndex, GenericContainerOwner, MergeModData, TypeDescriptionData};
+use merge_data::{
+    AddedGenericContainer, EncodedMethodIndex, GenericContainerOwner, MergeModData,
+    TypeDescriptionData,
+};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::lazy::SyncLazy;
@@ -89,6 +92,67 @@ impl<'md> ModLoader<'md> {
             .copy_from_slice(str.as_bytes());
         self.metadata.string_literal_data.push(0);
         idx
+    }
+
+    fn resolve_eidx(
+        &mut self,
+        eidx: EncodedMethodIndex,
+        mod_data: &MergeModData,
+        type_refs: &[usize],
+        method_refs: &[usize],
+        gen_method_offset: usize,
+    ) -> u32 {
+        match eidx {
+            EncodedMethodIndex::Il2CppClass(idx) => type_refs[idx] as u32 | 0x20000000,
+            EncodedMethodIndex::Il2CppType(idx) => type_refs[idx] as u32 | 0x40000000,
+            EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
+            EncodedMethodIndex::StringLiteral(idx) => {
+                let literal_idx = self.metadata.string_literal.len();
+                let literal_data_idx = self.metadata.string_literal_data.len();
+                let str = &mod_data.added_string_literals[idx];
+                self.metadata.string_literal.push(Il2CppStringLiteral {
+                    length: str.len() as u32,
+                    dataIndex: literal_data_idx as i32,
+                });
+                self.add_str_literal(str);
+                literal_idx as u32 | 0xA0000000
+            }
+            EncodedMethodIndex::MethodRef(idx) => (idx + gen_method_offset) as u32 | 0xC0000000,
+        }
+    }
+
+    fn resolve_generic_container(
+        &mut self,
+        generic_container: &Option<AddedGenericContainer>,
+        owner_idx: usize,
+        type_refs: &[usize],
+    ) -> i32 {
+        if let Some(container) = &generic_container {
+            let idx = self.metadata.generic_containers.len();
+            for (num, param) in container.parameters.iter().enumerate() {
+                let name = self.add_str(&param.name);
+                let constraints_start = self.metadata.generic_parameter_constraints.len();
+                let resolved_constraints =
+                    param.constraints.iter().map(|&idx| type_refs[idx] as i32);
+                self.metadata
+                    .generic_parameter_constraints
+                    .extend(resolved_constraints);
+
+                self.metadata
+                    .generic_parameters
+                    .push(Il2CppGenericParameter {
+                        ownerIndex: owner_idx as i32,
+                        nameIndex: name,
+                        constraintsStart: constraints_start as i16,
+                        constraintsCount: param.constraints.len() as i16,
+                        num: num as u16,
+                        flags: param.flags,
+                    });
+            }
+            idx as i32
+        } else {
+            -1
+        }
     }
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
@@ -250,31 +314,12 @@ impl<'md> ModLoader<'md> {
                         typeIndex: type_refs[param.ty] as i32,
                     });
                 }
-                let container_idx = if let Some(container) = &method.generic_container {
-                    let idx = self.metadata.generic_containers.len();
-                    for (num, param) in container.parameters.iter().enumerate() {
-                        let name = self.add_str(&param.name);
-                        let constraints_start = self.metadata.generic_parameter_constraints.len();
-                        let resolved_constraints =
-                            param.constraints.iter().map(|&idx| type_refs[idx] as i32);
-                        self.metadata
-                            .generic_parameter_constraints
-                            .extend(resolved_constraints);
-                        self.metadata
-                            .generic_parameters
-                            .push(Il2CppGenericParameter {
-                                ownerIndex: method_idx as i32,
-                                nameIndex: name,
-                                constraintsStart: constraints_start as i16,
-                                constraintsCount: param.constraints.len() as i16,
-                                num: num as u16,
-                                flags: param.flags,
-                            });
-                    }
-                    idx as i32
-                } else {
-                    -1
-                };
+
+                let container_idx = self.resolve_generic_container(
+                    &method.generic_container,
+                    method_idx,
+                    &type_refs,
+                );
                 let name = self.add_str(&method.name);
                 self.metadata.methods.push(Il2CppMethodDefinition {
                     nameIndex: name as i32,
@@ -310,31 +355,8 @@ impl<'md> ModLoader<'md> {
             }
 
             let ty_def_idx = self.metadata.type_definitions.len();
-            let container_idx = if let Some(container) = &ty_def.generic_container {
-                let idx = self.metadata.generic_containers.len();
-                for (num, param) in container.parameters.iter().enumerate() {
-                    let name = self.add_str(&param.name);
-                    let constraints_start = self.metadata.generic_parameter_constraints.len();
-                    let resolved_constraints =
-                        param.constraints.iter().map(|&idx| type_refs[idx] as i32);
-                    self.metadata
-                        .generic_parameter_constraints
-                        .extend(resolved_constraints);
-                    self.metadata
-                        .generic_parameters
-                        .push(Il2CppGenericParameter {
-                            ownerIndex: ty_def_idx as i32,
-                            nameIndex: name,
-                            constraintsStart: constraints_start as i16,
-                            constraintsCount: param.constraints.len() as i16,
-                            num: num as u16,
-                            flags: param.flags,
-                        });
-                }
-                idx as i32
-            } else {
-                -1
-            };
+            let container_idx =
+                self.resolve_generic_container(&ty_def.generic_container, ty_def_idx, &type_refs);
 
             let namespace = self.add_str(&ty_def.namespace);
             let name = self.add_str(&ty_def.name);
@@ -499,25 +521,13 @@ impl<'md> ModLoader<'md> {
             }
             let vtable_start = self.metadata.vtable_methods.len();
             for &encoded_idx in &ty_def.vtable {
-                let new_eidx = match encoded_idx {
-                    EncodedMethodIndex::Il2CppClass(idx) => type_refs[idx] as u32 | 0x20000000,
-                    EncodedMethodIndex::Il2CppType(idx) => type_refs[idx] as u32 | 0x40000000,
-                    EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
-                    EncodedMethodIndex::StringLiteral(idx) => {
-                        let literal_idx = self.metadata.string_literal.len();
-                        let literal_data_idx = self.metadata.string_literal_data.len();
-                        let str = &mod_data.added_string_literals[idx];
-                        self.metadata.string_literal.push(Il2CppStringLiteral {
-                            length: str.len() as u32,
-                            dataIndex: literal_data_idx as i32,
-                        });
-                        self.add_str_literal(str);
-                        literal_idx as u32 | 0xA0000000
-                    }
-                    EncodedMethodIndex::MethodRef(idx) => {
-                        (idx + gen_method_offset) as u32 | 0xC0000000
-                    }
-                };
+                let new_eidx = self.resolve_eidx(
+                    encoded_idx,
+                    mod_data,
+                    &type_refs,
+                    &method_refs,
+                    gen_method_offset,
+                );
                 self.metadata.vtable_methods.push(new_eidx);
             }
 
@@ -613,8 +623,7 @@ impl<'md> ModLoader<'md> {
             self.metadata_registration.type_definition_sizes.push(sizes);
         }
 
-        let metadata_usages: *const *mut *mut c_void =
-            unsafe { lib.symbol("g_MetadataUsages")? };
+        let metadata_usages: *const *mut *mut c_void = unsafe { lib.symbol("g_MetadataUsages")? };
         let metadata_usage_offset = self.metadata_registration.metadata_usages.len();
         for i in 0..mod_data.code_table_sizes.metadata_usages {
             let usage = unsafe { metadata_usages.add(i).read() };
@@ -622,34 +631,26 @@ impl<'md> ModLoader<'md> {
         }
         for usage_list in &mod_data.added_usage_lists {
             let pairs_idx = self.metadata.metadata_usage_pairs.len();
-            self.metadata.metadata_usage_lists.push(Il2CppMetadataUsageList { 
-                start: pairs_idx as u32, 
-                count: usage_list.len() as u32,
-            });
+            self.metadata
+                .metadata_usage_lists
+                .push(Il2CppMetadataUsageList {
+                    start: pairs_idx as u32,
+                    count: usage_list.len() as u32,
+                });
             for pair in usage_list {
-                let source = match pair.source {
-                    EncodedMethodIndex::Il2CppClass(idx) => type_refs[idx] as u32 | 0x20000000,
-                    EncodedMethodIndex::Il2CppType(idx) => type_refs[idx] as u32 | 0x40000000,
-                    EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
-                    EncodedMethodIndex::StringLiteral(idx) => {
-                        let literal_idx = self.metadata.string_literal.len();
-                        let literal_data_idx = self.metadata.string_literal_data.len();
-                        let str = &mod_data.added_string_literals[idx];
-                        self.metadata.string_literal.push(Il2CppStringLiteral {
-                            length: str.len() as u32,
-                            dataIndex: literal_data_idx as i32,
-                        });
-                        self.add_str_literal(str);
-                        literal_idx as u32 | 0xA0000000
-                    }
-                    EncodedMethodIndex::MethodRef(idx) => {
-                        (idx + gen_method_offset) as u32 | 0xC0000000
-                    }
-                };
-                self.metadata.metadata_usage_pairs.push(Il2CppMetadataUsagePair {
-                    encodedSourceIndex: source,
-                    destinationIndex: (pair.dest + metadata_usage_offset) as u32
-                })
+                let source = self.resolve_eidx(
+                    pair.source,
+                    mod_data,
+                    &type_refs,
+                    &method_refs,
+                    gen_method_offset,
+                );
+                self.metadata
+                    .metadata_usage_pairs
+                    .push(Il2CppMetadataUsagePair {
+                        encodedSourceIndex: source,
+                        destinationIndex: (pair.dest + metadata_usage_offset) as u32,
+                    })
             }
         }
 
