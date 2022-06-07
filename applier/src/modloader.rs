@@ -1,7 +1,10 @@
 use crate::il2cpp_types::*;
 use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use anyhow::{bail, Context, Result};
-use merge_data::{EncodedMethodIndex, MergeModData, TypeDescriptionData};
+use merge_data::{
+    AddedGenericParameter, EncodedMethodIndex, GenericContainerOwner, MergeModData,
+    TypeDescriptionData,
+};
 use std::collections::HashMap;
 use std::lazy::SyncLazy;
 use std::sync::Mutex;
@@ -91,6 +94,7 @@ impl<'md> ModLoader<'md> {
     }
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData) -> Result<()> {
+        // TODO: Theres a lot of code duplication in this function, especially with generic containers
         // TODO: proper error handing, fix type_def_map if loading fails
         for type_def in &mod_data.added_type_defintions {
             self.type_def_map.insert(
@@ -127,11 +131,18 @@ impl<'md> ModLoader<'md> {
                     // Types used here should be earlier in the list and already resolved
                     type_: self.metadata_registration.types[type_refs[idx]],
                 },
-                TypeDescriptionData::GenericParam(idx) => todo!(),
+                TypeDescriptionData::GenericParam(owner, idx) => Il2CppType__bindgen_ty_1 {
+                    // These definitely can't be resolved right now as they require type definitions and methods.
+                    // Like generic classes, they will be fixed later
+                    dummy: (match owner {
+                        GenericContainerOwner::Class(idx) => idx << 16,
+                        GenericContainerOwner::Method(idx) => idx << 16,
+                    } | (idx as usize)) as _,
+                },
                 TypeDescriptionData::GenericClass(idx) => Il2CppType__bindgen_ty_1 {
                     // Generic classes cannot be resolved now because they require types to be resolved.
                     // They will be fixed later, but for now we just assign their index
-                    klassIndex: idx as i32,
+                    generic_class: idx as _,
                 },
             };
             let bitfield = Il2CppType::new_bitfield_1(
@@ -208,10 +219,10 @@ impl<'md> ModLoader<'md> {
                 })))
         }
         // Now that we've resolved our generic classes, we can fix our type refs
-        for type_ptr in added_types {
+        for &type_ptr in &added_types {
             let ty = unsafe { &mut *type_ptr };
             if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_GENERICINST {
-                let idx = unsafe { ty.data.klassIndex } as usize;
+                let idx = unsafe { ty.data.generic_class } as usize;
                 ty.data.generic_class =
                     self.metadata_registration.generic_classes[idx + gen_class_offset];
             }
@@ -231,6 +242,7 @@ impl<'md> ModLoader<'md> {
             }
             let methods_start = self.metadata.methods.len();
             for method in &ty_def.methods {
+                let method_idx = self.metadata.methods.len();
                 let params_start = self.metadata.parameters.len();
                 for param in &method.parameters {
                     let name = self.add_str(&param.name);
@@ -240,14 +252,39 @@ impl<'md> ModLoader<'md> {
                         typeIndex: type_refs[param.ty] as i32,
                     });
                 }
+                let container_idx = if let Some(container) = &method.generic_container {
+                    let idx = self.metadata.generic_containers.len();
+                    let params_start = self.metadata.generic_parameters.len();
+                    for (num, param) in container.parameters.iter().enumerate() {
+                        let name = self.add_str(&param.name);
+                        let constraints_start = self.metadata.generic_parameter_constraints.len();
+                        let resolved_constraints =
+                            param.constraints.iter().map(|&idx| type_refs[idx] as i32);
+                        self.metadata
+                            .generic_parameter_constraints
+                            .extend(resolved_constraints);
+                        self.metadata
+                            .generic_parameters
+                            .push(Il2CppGenericParameter {
+                                ownerIndex: method_idx as i32,
+                                nameIndex: name,
+                                constraintsStart: constraints_start as i16,
+                                constraintsCount: param.constraints.len() as i16,
+                                num: num as u16,
+                                flags: param.flags,
+                            });
+                    }
+                    idx as i32
+                } else {
+                    -1
+                };
                 let name = self.add_str(&method.name);
                 self.metadata.methods.push(Il2CppMethodDefinition {
                     nameIndex: name as i32,
                     declaringType: type_def_refs[method.declaring_type] as i32,
                     returnType: type_refs[method.return_ty] as i32,
                     parameterStart: params_start as i32,
-                    // TODO: generics
-                    genericContainerIndex: -1,
+                    genericContainerIndex: container_idx,
                     token: method.token,
                     flags: method.flags,
                     iflags: method.iflags,
@@ -274,6 +311,34 @@ impl<'md> ModLoader<'md> {
                         offset: offset as i32,
                     });
             }
+
+            let ty_def_idx = self.metadata.type_definitions.len();
+            let container_idx = if let Some(container) = &ty_def.generic_container {
+                let idx = self.metadata.generic_containers.len();
+                let params_start = self.metadata.generic_parameters.len();
+                for (num, param) in container.parameters.iter().enumerate() {
+                    let name = self.add_str(&param.name);
+                    let constraints_start = self.metadata.generic_parameter_constraints.len();
+                    let resolved_constraints =
+                        param.constraints.iter().map(|&idx| type_refs[idx] as i32);
+                    self.metadata
+                        .generic_parameter_constraints
+                        .extend(resolved_constraints);
+                    self.metadata
+                        .generic_parameters
+                        .push(Il2CppGenericParameter {
+                            ownerIndex: ty_def_idx as i32,
+                            nameIndex: name,
+                            constraintsStart: constraints_start as i16,
+                            constraintsCount: param.constraints.len() as i16,
+                            num: num as u16,
+                            flags: param.flags,
+                        });
+                }
+                idx as i32
+            } else {
+                -1
+            };
 
             let namespace = self.add_str(&ty_def.namespace);
             let name = self.add_str(&ty_def.name);
@@ -408,6 +473,30 @@ impl<'md> ModLoader<'md> {
             metadata_def.eventStart = events_start as i32;
             metadata_def.propertyStart = properties_start as i32;
             metadata_def.vtableStart = vtable_start as i32;
+        }
+        // We can also fix our generic params in our type refs
+        for &type_ptr in &added_types {
+            let ty = unsafe { &mut *type_ptr };
+            let encoded_data = unsafe { ty.data.dummy } as usize;
+            let idx = encoded_data >> 16;
+            let num = encoded_data & 0xFFFF;
+            let gc_idx = match ty.type_() {
+                Il2CppTypeEnum_IL2CPP_TYPE_VAR => {
+                    self.metadata.type_definitions[type_def_refs[idx]].genericContainerIndex
+                }
+                Il2CppTypeEnum_IL2CPP_TYPE_MVAR => {
+                    self.metadata.methods[method_refs[idx]].genericContainerIndex
+                }
+                _ => continue,
+            } as usize;
+            ty.data.genericParameterIndex =
+                self.metadata.generic_containers[gc_idx].genericParameterStart + num as i32;
+
+            if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_GENERICINST {
+                let idx = unsafe { ty.data.generic_class } as usize;
+                ty.data.generic_class =
+                    self.metadata_registration.generic_classes[idx + gen_class_offset];
+            }
         }
 
         let gen_method_offset = self.metadata_registration.method_specs.len();

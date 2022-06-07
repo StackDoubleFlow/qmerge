@@ -286,7 +286,6 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     codegen::transform(
         &mut compile_command,
         &mut data_builder,
-        mod_image,
         cpp_path,
         transformed_path,
         &mod_config.id,

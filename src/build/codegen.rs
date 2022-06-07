@@ -1,9 +1,7 @@
 use super::clang::CompileCommand;
-use super::data::{GenericCtx, ModDataBuilder};
-use super::find_method_with_rid;
+use super::data::ModDataBuilder;
 use super::invokers::ModFunctionUsages;
 use anyhow::{bail, Context, Result};
-use il2cpp_metadata_raw::Il2CppImageDefinition;
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
@@ -31,7 +29,6 @@ pub fn get_methods(src: &str) -> Result<Vec<Option<&str>>> {
 pub fn transform(
     compile_command: &mut CompileCommand,
     data_builder: &mut ModDataBuilder,
-    image: &Il2CppImageDefinition,
     cpp_path: &Path,
     transformed_path: &Path,
     id: &str,
@@ -104,7 +101,6 @@ pub fn transform(
             lines
                 .next()
                 .context("file ended reading s_rgctxValues (skip '{')")?;
-            let mut values_idx = 0;
             writeln!(new_src, "{{")?;
             loop {
                 let line = lines.next().context("file ended reading s_rgctxValues")?;
@@ -125,22 +121,7 @@ pub fn transform(
                 let data_ty = str::parse(data_ty_str)?;
 
                 let new_idx = match data_ty {
-                    1 => {
-                        let token = rgctx_indices
-                            .iter()
-                            .find(|(_, (start, len))| {
-                                values_idx >= *start && values_idx < *start + *len
-                            })
-                            .context("could not find token range for rgctx type value")?
-                            .0;
-                        let method_idx =
-                            find_method_with_rid(data_builder.metadata, image, token & 0x00FFFFFF)?;
-                        let ctx = GenericCtx::for_method(
-                            data_builder.metadata,
-                            &data_builder.metadata.methods[method_idx],
-                        );
-                        data_builder.add_type(idx, &ctx)?
-                    }
+                    1 => data_builder.add_type(idx)?,
                     2 => data_builder.add_type_def(idx)?,
                     3 => data_builder.add_method(idx)?,
                     _ => bail!("unsupported runtime generic context data type: {}", data_ty),
@@ -150,7 +131,6 @@ pub fn transform(
                     "    {{ (Il2CppRGCTXDataType){}, {} }},",
                     data_ty, new_idx
                 )?;
-                values_idx += 1;
             }
             writeln!(new_src, "}};")?;
         }
