@@ -27,19 +27,4 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings_24_5.rs"))
         .expect("Couldn't write bindings!");
-
-    // println!("cargo:rustc-link-arg=-Wl,--whole-archive");
-    cc::Build::new()
-        .include(libil2cpp_path)
-        .cpp(true)
-        // Ignore param warnings for todo functions
-        .flag_if_supported("-Wno-unused-parameter")
-        // Il2Cpp code emits these warnings
-        .flag_if_supported("-Wno-invalid-offsetof")
-        .flag_if_supported("-Wno-reorder")
-        .flag_if_supported("-Wno-unused-private-field")
-        .file("codegen_api/codegen_api.cpp")
-        .cargo_metadata(false)
-        .compile("codegen_api");
-    println!("cargo:rustc-link-search=native={}", out_path.display())
 }
