@@ -23,6 +23,7 @@ tracing-error = { version = "0.2", default-features = false }
 cfg-if = "1"
 dlopen = "0.1"
 anyhow = "1"
+applier_proc_macro = { path = "./proc_macro" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tracing-subscriber = { version = "0.3", features = [
@@ -32,4 +33,5 @@ tracing-subscriber = { version = "0.3", features = [
 ], default-features = false }
 
 [build-dependencies]
-bindgen = "0.59.2"
+bindgen = "0.60.1"
+cc = "1.0"

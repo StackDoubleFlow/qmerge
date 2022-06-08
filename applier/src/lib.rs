@@ -1,4 +1,5 @@
 #![feature(once_cell, backtrace)]
+#![feature(native_link_modifiers_bundle)]
 
 mod codegen_api;
 pub mod il2cpp_types;
