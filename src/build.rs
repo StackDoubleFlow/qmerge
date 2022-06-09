@@ -429,7 +429,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         metadata_usages: usages_len,
     };
     let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
-    // dbg!(&mod_data);
+    dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_adj_thunk_table(

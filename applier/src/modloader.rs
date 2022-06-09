@@ -82,7 +82,7 @@ impl<'md> ModLoader<'md> {
 
     fn add_str(&mut self, str: &str) -> i32 {
         let idx = self.metadata.string.len() as i32;
-        self.metadata.string.copy_from_slice(str.as_bytes());
+        self.metadata.string.extend_from_slice(str.as_bytes());
         self.metadata.string.push(0);
         idx
     }
@@ -91,7 +91,7 @@ impl<'md> ModLoader<'md> {
         let idx = self.metadata.string_literal_data.len() as i32;
         self.metadata
             .string_literal_data
-            .copy_from_slice(str.as_bytes());
+            .extend_from_slice(str.as_bytes());
         self.metadata.string_literal_data.push(0);
         idx
     }
@@ -158,7 +158,6 @@ impl<'md> ModLoader<'md> {
     }
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
-        // TODO: Theres a lot of code duplication in this function, especially with generic containers
         // TODO: proper error handing, fix type_def_map if loading fails
         for type_def in &mod_data.added_type_defintions {
             self.type_def_map.insert(
