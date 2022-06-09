@@ -5,3 +5,6 @@
 #![allow(improper_ctypes)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings_24_5.rs"));
+
+unsafe impl Sync for Il2CppCodeRegistration {}
+unsafe impl Sync for Il2CppMetadataRegistration {}

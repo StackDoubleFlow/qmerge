@@ -45,7 +45,17 @@ pub fn get_symbol(name: &str) -> Result<*const ()> {
         .find(|st| st.symbol == name)
         .unwrap();
 
-    let start: *const u32 = unsafe { LIBIL2CPP.symbol(&symbol_trace.start)? };
+    let start: *const u32 = if symbol_trace.start.starts_with("il2cpp:") {
+        let parts: Vec<&str> = symbol_trace.start.split(':').collect();
+        let namespace = parts[1];
+        let class = parts[2];
+        let method_idx = parts[3].parse::<usize>();
+        todo!()
+    } else if symbol_trace.start.starts_with("invoker:") {
+        todo!()
+    } else {
+        unsafe { LIBIL2CPP.symbol(&symbol_trace.start)? }
+    };
 
     let nums = symbol_trace
         .trace

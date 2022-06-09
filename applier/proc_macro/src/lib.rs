@@ -39,13 +39,13 @@ impl Parse for Sig {
 }
 
 struct CodegenProxy {
-    to: LitStr,
+    to: Option<LitStr>,
     input: Sig,
     param_names: Vec<Ident>,
 }
 
 impl CodegenProxy {
-    fn new(to: LitStr, input: Sig) -> Self {
+    fn new(to: Option<LitStr>, input: Sig) -> Self {
         let param_names = input
             .params
             .iter()
@@ -93,7 +93,10 @@ impl CodegenProxy {
 
     fn proxy_body(&self) -> Result<TokenStream2, Error> {
         let game_fn_ty = self.game_fn_ty()?;
-        let proxy_to = &self.to;
+        let proxy_to = match &self.to {
+            Some(lit) => lit.clone(),
+            None => LitStr::new(&self.input.ident.to_string(), self.input.ident.span())
+        };
         let param_names = &self.param_names;
         Ok(quote! {
             static GAME_FN: SyncLazy<#game_fn_ty> = SyncLazy::new(|| {
@@ -118,7 +121,11 @@ impl CodegenProxy {
 
 #[proc_macro_attribute]
 pub fn proxy_codegen_api(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let arg = parse_macro_input!(attr as LitStr);
+    let arg = if attr.is_empty() {
+        None
+    } else {
+        Some(parse_macro_input!(attr as LitStr))
+    };
     let input = parse_macro_input!(item as Sig);
 
     match CodegenProxy::new(arg, input).proxy_fn() {

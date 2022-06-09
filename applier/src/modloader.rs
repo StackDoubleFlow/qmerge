@@ -8,11 +8,13 @@ use merge_data::{
 };
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::lazy::SyncLazy;
+use std::lazy::{SyncLazy, SyncOnceCell};
 use std::sync::Mutex;
 use std::{ptr, str};
 
 static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
+static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
+static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> = SyncOnceCell::new();
 
 pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
     if (offset as i32) < 0 {

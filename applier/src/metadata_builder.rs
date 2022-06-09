@@ -192,7 +192,7 @@ impl CodeRegistrationBuilder {
         }
     }
 
-    pub fn build(self) {
+    pub fn build(self) -> &'static Il2CppCodeRegistration  {
         fn to_raw<T>(data: Vec<T>) -> (*const T, u32) {
             let data = Box::leak(data.into_boxed_slice());
             (data.as_ptr(), data.len() as u32)
@@ -207,6 +207,10 @@ impl CodeRegistrationBuilder {
         (cr.customAttributeGenerators, cr.customAttributeCount) = (ca.0, ca.1 as i32);
         let cg = to_raw(self.code_gen_modules);
         (cr.codeGenModules, cr.codeGenModulesCount) = (cg.0 as _, cg.1);
+
+        let static_ref = Box::leak(cr);
+        unsafe { (*self.raw) = static_ref; }
+        static_ref
     }
 }
 
@@ -260,7 +264,7 @@ impl MetadataRegistrationBuilder {
         }
     }
 
-    pub fn build(self) {
+    pub fn build(self) -> &'static Il2CppMetadataRegistration {
         fn to_raw<T>(data: Vec<T>) -> (*const T, i32) {
             let data = Box::leak(data.into_boxed_slice());
             (data.as_ptr(), data.len() as i32)
@@ -279,5 +283,9 @@ impl MetadataRegistrationBuilder {
         assert!(self.metadata_usages.len() <= u32::MAX as usize);
         let mu = to_raw(self.metadata_usages);
         (mr.metadataUsages, mr.metadataUsagesCount) = (mu.0, mu.1 as _);
+
+        let static_ref = Box::leak(mr);
+        unsafe { (*self.raw) = static_ref; }
+        static_ref
     }
 }

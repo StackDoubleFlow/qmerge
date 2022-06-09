@@ -51,11 +51,13 @@ impl CompileCommand {
         }
         command
             .args(&["-target", target])
-            .args(&["-shared", "-fPIC"])
+            .args(&["-shared", "-fPIC", "-Wl,--no-undefined"])
             .arg("-Wno-missing-declarations")
             .arg("-Wno-invalid-offsetof")
             .arg("-o")
             .arg(&self.output_path)
+            // TODO: Get path to applier binary
+            .arg("../target/aarch64-linux-android/release/libmerge_applier.so")
             .args(&self.source_files);
         // dbg!(&command);
         let status = command
