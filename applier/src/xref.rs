@@ -1,12 +1,16 @@
-use anyhow::{anyhow, bail, Result};
+use crate::get_mod_data_path;
+use crate::metadata_builder::{CodeRegistrationBuilder, Metadata};
+use crate::modloader::{get_str, offset_len};
+use anyhow::{anyhow, bail, Context, Result};
 use bad64::{Imm, Instruction, Op, Operand};
 use dlopen::raw::Library;
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
+use std::ffi::CStr;
 use std::fs;
-use std::lazy::SyncLazy;
+use std::lazy::{SyncLazy, SyncOnceCell};
+use std::mem::transmute;
 use tracing::debug;
-
-use crate::get_mod_data_path;
 
 static LIBIL2CPP: SyncLazy<Library> = SyncLazy::new(|| Library::open("libil2cpp.so").unwrap());
 
@@ -14,6 +18,99 @@ static XREF_DATA: SyncLazy<XRefData> = SyncLazy::new(|| {
     let path = get_mod_data_path().join("xref_gen.json");
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 });
+static XREF_ROOTS: SyncOnceCell<HashMap<(String, String, usize), Il2CppRoot>> = SyncOnceCell::new();
+
+#[derive(Debug)]
+struct Il2CppRoot {
+    method_pointer: Option<*const u32>,
+    invoker: Option<*const u32>,
+}
+
+unsafe impl Send for Il2CppRoot {}
+unsafe impl Sync for Il2CppRoot {}
+
+impl Il2CppRoot {
+    fn get(
+        token: u32,
+        image_name: &str,
+        code_registration: &CodeRegistrationBuilder,
+    ) -> Result<Self> {
+        let rid = 0x00FFFFFF & token;
+        let module = code_registration
+            .code_gen_modules
+            .iter()
+            .find_map(|&module| unsafe {
+                let module = &*module;
+                let name = CStr::from_ptr(module.moduleName).to_str().unwrap();
+                if name == image_name {
+                    Some(module)
+                } else {
+                    None
+                }
+            })
+            .context("could not find module for xref trace")?;
+        let method_pointer = unsafe {
+            let ptr = module.methodPointers.add(rid as usize - 1);
+            if ptr.is_null() {
+                None
+            } else {
+                Some(transmute(ptr.read()))
+            }
+        };
+        let invoker = unsafe {
+            let invoker_idx = module.invokerIndices.add(rid as usize - 1).read();
+            if invoker_idx != -1 {
+                Some(transmute(
+                    code_registration.invoker_pointers[invoker_idx as usize],
+                ))
+            } else {
+                None
+            }
+        };
+
+        Ok(Self {
+            method_pointer,
+            invoker,
+        })
+    }
+}
+
+pub fn initialize_roots(
+    metadata: &Metadata,
+    code_registration: &CodeRegistrationBuilder,
+) -> Result<()> {
+    let mut required_roots = HashSet::new();
+    for trace in &XREF_DATA.traces {
+        if trace.start.starts_with("il2cpp:") || trace.start.starts_with("invoker:") {
+            let parts: Vec<&str> = trace.start.split(':').collect();
+            let namespace = parts[1];
+            let class = parts[2];
+            let method_idx = parts[3].parse::<usize>()?;
+            required_roots.insert((namespace, class, method_idx));
+        }
+    }
+
+    let mut roots = HashMap::new();
+    for image in &metadata.images {
+        let image_name = get_str(&metadata.string, image.nameIndex as usize)?;
+        let type_defs_range = offset_len(image.typeStart, image.typeCount as i32);
+        for type_def in &metadata.type_definitions[type_defs_range] {
+            let method_range = offset_len(type_def.methodStart, type_def.method_count as i32);
+            let namespace = get_str(&metadata.string, type_def.namespaceIndex as usize)?;
+            let class = get_str(&metadata.string, type_def.nameIndex as usize)?;
+            for (i, method) in metadata.methods[method_range].iter().enumerate() {
+                if required_roots.take(&(namespace, class, i)).is_some() {
+                    let root = Il2CppRoot::get(method.token, image_name, code_registration)?;
+                    roots.insert((namespace.to_string(), class.to_string(), i), root);
+                }
+            }
+        }
+    }
+
+    XREF_ROOTS.set(roots).unwrap();
+
+    Ok(())
+}
 
 #[derive(Deserialize, Debug)]
 struct SymbolTrace {
@@ -38,6 +135,14 @@ pub fn get_data_symbol<T>(name: &str) -> Result<*mut T> {
     unsafe { std::mem::transmute(symbol) }
 }
 
+fn get_root(namespace: &str, class: &str, method_idx: usize) -> Result<&'static Il2CppRoot> {
+    XREF_ROOTS
+        .get()
+        .context("il2cpp xref roots has not been initialized yet")?
+        .get(&(namespace.to_string(), class.to_string(), method_idx))
+        .context("could not find root")
+}
+
 pub fn get_symbol(name: &str) -> Result<*const ()> {
     let symbol_trace = XREF_DATA
         .traces
@@ -47,12 +152,14 @@ pub fn get_symbol(name: &str) -> Result<*const ()> {
 
     let start: *const u32 = if symbol_trace.start.starts_with("il2cpp:") {
         let parts: Vec<&str> = symbol_trace.start.split(':').collect();
-        let namespace = parts[1];
-        let class = parts[2];
-        let method_idx = parts[3].parse::<usize>();
-        todo!()
+        let root = get_root(parts[1], parts[2], parts[3].parse::<usize>()?)?;
+        root.method_pointer
+            .context("root does not have method pointer")?
     } else if symbol_trace.start.starts_with("invoker:") {
-        todo!()
+        let parts: Vec<&str> = symbol_trace.start.split(':').collect();
+        let root = get_root(parts[1], parts[2], parts[3].parse::<usize>()?)?;
+        root.invoker
+            .context("root does not have invoker pointer")?
     } else {
         unsafe { LIBIL2CPP.symbol(&symbol_trace.start)? }
     };

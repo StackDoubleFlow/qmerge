@@ -18,7 +18,7 @@ use std::fs;
 use std::lazy::SyncLazy;
 use std::mem::transmute;
 use std::path::PathBuf;
-use tracing::{debug, info};
+use tracing::info;
 
 fn get_mod_data_path() -> PathBuf {
     // TODO
@@ -44,10 +44,12 @@ pub extern "C" fn load_metadata(file_name: *const u8) -> *const u8 {
 
     let original_metadata = original_fn(file_name);
     let code_registration = xref::get_data_symbol("_ZL24s_Il2CppCodeRegistration").unwrap();
-    let metadata_registration = xref::get_data_symbol("_ZL28s_Il2CppMetadataRegistration").unwrap();
 
     let mut metadata = unsafe { Metadata::from_raw(original_metadata) }.unwrap();
     let mut code_registration = unsafe { CodeRegistrationBuilder::from_raw(code_registration) };
+    xref::initialize_roots(&metadata, &code_registration).unwrap();
+
+    let metadata_registration = xref::get_data_symbol("_ZL28s_Il2CppMetadataRegistration").unwrap();
     // The count saved in the Il2CppMetadataRegistration struct is seemingly incorrect, so we calculate our own
     let metadata_usages_count = metadata
         .metadata_usage_pairs
@@ -89,7 +91,6 @@ fn load_mods(
         file_path.set_extension("mmd");
         let mmd = fs::read(&file_path).context("could not read mod data")?;
         let mmd = MergeModData::deserialize(&mmd).context("failed to deserialize mod data")?;
-        debug!("{:?}", mmd);
 
         file_path.set_extension("so");
         let so_path = get_exec_path().join(file_path.file_name().unwrap());
