@@ -7,7 +7,7 @@ use std::lazy::{SyncLazy, SyncOnceCell};
 use std::mem::transmute;
 use std::os::raw::c_char;
 
-fn get_method_info_from_idx(idx: usize) -> &'static MethodInfo {
+pub fn get_method_info_from_idx(idx: usize) -> &'static MethodInfo {
     static FN_ADDR: SyncOnceCell<extern "C" fn(i32) -> *const MethodInfo> = SyncOnceCell::new();
     let fn_addr = FN_ADDR.get_or_init(|| {
         let addr = xref::get_symbol(
@@ -37,7 +37,7 @@ pub extern "C" fn merge_codegen_initialize_method(
     let mod_id = unsafe { CStr::from_ptr(mod_id) }.to_str().unwrap();
     let usage_offset = MODS.lock().unwrap()[mod_id].refs.usage_list_offset;
 
-    _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32)
+    _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32);
 }
 
 type P = *const ();

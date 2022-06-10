@@ -41,6 +41,7 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
 pub struct Mod {
     pub lib: Library,
     pub refs: ModRefs,
+    pub load_fn: Option<unsafe extern "C" fn()>,
 }
 
 pub struct ModRefs {
@@ -302,6 +303,14 @@ impl<'md> ModLoader<'md> {
             }
         }
 
+        let code_gen_module: *const Il2CppCodeGenModule =
+            unsafe { lib.symbol(&format!("g_{}CodeGenModule", id))? };
+        self.code_registration
+            .code_gen_modules
+            .push(code_gen_module);
+
+        let mut load_fn = None;
+
         // Fill in everything that doesn't requre method references now
         let ty_defs_start = self.metadata.type_definitions.len();
         for ty_def in &mod_data.added_type_defintions {
@@ -316,6 +325,15 @@ impl<'md> ModLoader<'md> {
             }
             let methods_start = self.metadata.methods.len();
             for method in &ty_def.methods {
+                if ty_def.name == "Plugin" && method.name == "Load" && method.parameters.is_empty() {
+                    let rid = 0x00FFFFFF & method.token;
+                    unsafe { 
+                        let code_gen_module = &*code_gen_module;
+                        let f = code_gen_module.methodPointers.add(rid as usize - 1).read();
+                        load_fn = f;
+                    }
+
+                }
                 let method_idx = self.metadata.methods.len();
                 let params_start = self.metadata.parameters.len();
                 for param in &method.parameters {
@@ -348,6 +366,7 @@ impl<'md> ModLoader<'md> {
             }
             let nested_types_start = self.metadata.nested_types.len();
             for &nested_ty in &ty_def.nested_types {
+                tracing::debug!("adding nested type in {}", ty_def.name);
                 self.metadata
                     .nested_types
                     .push(type_def_refs[nested_ty] as i32);
@@ -616,12 +635,6 @@ impl<'md> ModLoader<'md> {
             customAttributeCount: 0,
         });
 
-        let code_gen_module: *const Il2CppCodeGenModule =
-            unsafe { lib.symbol(&format!("g_{}CodeGenModule", id))? };
-        self.code_registration
-            .code_gen_modules
-            .push(code_gen_module);
-
         let field_offset_table: *const *const i32 = unsafe { lib.symbol("g_FieldOffsetTable")? };
         for i in 0..mod_data.added_type_defintions.len() {
             let offsets = unsafe { field_offset_table.add(i).read() };
@@ -677,6 +690,7 @@ impl<'md> ModLoader<'md> {
                     method_refs,
                     usage_list_offset,
                 },
+                load_fn,
             },
         );
 

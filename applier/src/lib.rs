@@ -13,12 +13,12 @@ use dlopen::raw::Library;
 use inline_hook::Hook;
 use merge_data::MergeModData;
 use metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
-use modloader::ModLoader;
+use modloader::{ModLoader, MODS};
 use std::fs;
 use std::lazy::SyncLazy;
 use std::mem::transmute;
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{info, warn};
 
 fn get_mod_data_path() -> PathBuf {
     // TODO
@@ -114,4 +114,22 @@ pub extern "C" fn setup() {
     setup::setup(env!("CARGO_PKG_NAME"));
     info!("merge applier is setting up");
     SyncLazy::force(&LOAD_METADATA_HOOK);
+}
+
+fn call_plugin_loads() -> Result<()> {
+    let ids: Vec<String> = MODS.lock().unwrap().keys().cloned().collect();
+    for id in ids {
+        info!("Initializing mod {}", id);
+        let load_fn = MODS.lock().unwrap()[&id].load_fn;
+        match load_fn {
+            Some(load_fn) => unsafe { load_fn() },
+            None => warn!("Mod {} is missing a load function!", id),
+        }
+    }
+    Ok(())
+}
+
+#[no_mangle]
+pub extern "C" fn load() {
+    call_plugin_loads().unwrap();
 }
