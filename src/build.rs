@@ -204,6 +204,29 @@ fn add_cpp_ty<'a>(
     Ok(())
 }
 
+fn convert_codegen_init_method(source: &str, mod_id: &str, write_header: bool) -> Result<String> {
+    let mut new_src = String::new();
+    if write_header {
+        writeln!(new_src, "#include \"merge/codegen.h\"")?;
+    }
+    for line in source.lines() {
+        if line.trim().starts_with("il2cpp_codegen_initialize_method") {
+            let mut line = line.replace(
+                "il2cpp_codegen_initialize_method",
+                "merge_codegen_initialize_method",
+            );
+            let paren_idx = line
+                .find('(')
+                .expect("could not find '(' for il2cpp_codegen_initialize_method");
+            line.insert_str(paren_idx + 1, &format!("\"{}\", ", mod_id));
+            writeln!(new_src, "{}", line)?;
+        } else {
+            writeln!(new_src, "{}", line.trim_start_matches('\u{FEFF}'))?;
+        }
+    }
+    Ok(new_src)
+}
+
 pub fn build(regen_cpp: bool) -> Result<()> {
     let mod_config = Mod::read_config()?;
     let app = APPS
@@ -331,7 +354,11 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     for name in &mod_source_names {
         let src_path = cpp_path.join(name).with_extension("cpp");
         let new_path = transformed_path.join(name).with_extension("cpp");
-        fs::copy(&src_path, &new_path)?;
+        let source = fs::read_to_string(&src_path)?;
+        fs::write(
+            &new_path,
+            convert_codegen_init_method(&source, &mod_config.id, true)?,
+        )?;
         compile_command.add_source(new_path);
         mod_sources.push(fs::read_to_string(src_path)?);
     }
@@ -379,7 +406,8 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mut generic_sources = Vec::new();
     for name in &generic_source_names {
         let path = cpp_path.join(name).with_extension("cpp");
-        generic_sources.push(fs::read_to_string(path)?);
+        let source = fs::read_to_string(path)?;
+        generic_sources.push(convert_codegen_init_method(&source, &mod_config.id, false)?);
     }
 
     // Find all struct definitions and fds

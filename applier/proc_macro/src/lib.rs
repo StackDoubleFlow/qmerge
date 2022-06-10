@@ -95,7 +95,7 @@ impl CodegenProxy {
         let game_fn_ty = self.game_fn_ty()?;
         let proxy_to = match &self.to {
             Some(lit) => lit.clone(),
-            None => LitStr::new(&self.input.ident.to_string(), self.input.ident.span())
+            None => LitStr::new(&self.input.ident.to_string(), self.input.ident.span()),
         };
         let param_names = &self.param_names;
         Ok(quote! {
