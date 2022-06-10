@@ -159,10 +159,10 @@ impl<'md> ModLoader<'md> {
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
         // TODO: proper error handing, fix type_def_map if loading fails
-        for type_def in &mod_data.added_type_defintions {
+        for (i, type_def) in mod_data.added_type_defintions.iter().enumerate() {
             self.type_def_map.insert(
                 (type_def.namespace.to_string(), type_def.name.to_string()),
-                self.type_def_map.len(),
+                self.metadata.type_definitions.len() + i,
             );
         }
 
