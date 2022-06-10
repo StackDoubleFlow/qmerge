@@ -537,7 +537,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
 
         let generic_inst = &self.runtime_metadata.generic_insts[idx as usize];
 
-        let desc_idx = self.generic_methods.len();
+        let desc_idx = self.generic_insts.len();
         let desc = GenericInst {
             types: generic_inst
                 .types
