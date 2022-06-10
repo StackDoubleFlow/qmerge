@@ -29,6 +29,16 @@ pub extern "C" fn merge_codegen_resolve_method(
     let method_info = get_method_info_from_idx(method_idx);
     method_info.methodPointer
 }
+#[no_mangle]
+pub extern "C" fn merge_codegen_initialize_method(
+    mod_id: *const c_char,
+    metadata_usage_idx: usize,
+) {
+    let mod_id = unsafe { CStr::from_ptr(mod_id) }.to_str().unwrap();
+    let usage_offset = MODS.lock().unwrap()[mod_id].refs.usage_list_offset;
+
+    _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32)
+}
 
 type P = *const ();
 

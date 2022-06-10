@@ -13,8 +13,8 @@ use std::sync::Mutex;
 use std::{ptr, str};
 
 pub static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
-static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
-static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
+pub static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
+pub static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
     SyncOnceCell::new();
 
 pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
@@ -47,6 +47,7 @@ pub struct ModRefs {
     pub type_def_refs: Vec<usize>,
     pub type_refs: Vec<usize>,
     pub method_refs: Vec<usize>,
+    pub usage_list_offset: usize,
 }
 
 pub struct ModLoader<'md> {
@@ -640,6 +641,7 @@ impl<'md> ModLoader<'md> {
             let usage = unsafe { metadata_usages.add(i).read() };
             self.metadata_registration.metadata_usages.push(usage);
         }
+        let usage_list_offset = self.metadata.metadata_usage_lists.len();
         for usage_list in &mod_data.added_usage_lists {
             let pairs_idx = self.metadata.metadata_usage_pairs.len();
             self.metadata
@@ -673,6 +675,7 @@ impl<'md> ModLoader<'md> {
                     type_def_refs,
                     type_refs,
                     method_refs,
+                    usage_list_offset,
                 },
             },
         );
