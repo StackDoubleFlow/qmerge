@@ -192,7 +192,7 @@ impl CodeRegistrationBuilder {
         }
     }
 
-    pub fn build(self) -> &'static Il2CppCodeRegistration  {
+    pub fn build(self) -> &'static Il2CppCodeRegistration {
         fn to_raw<T>(data: Vec<T>) -> (*const T, u32) {
             let data = Box::leak(data.into_boxed_slice());
             (data.as_ptr(), data.len() as u32)
@@ -209,7 +209,9 @@ impl CodeRegistrationBuilder {
         (cr.codeGenModules, cr.codeGenModulesCount) = (cg.0 as _, cg.1);
 
         let static_ref = Box::leak(cr);
-        unsafe { (*self.raw) = static_ref; }
+        unsafe {
+            (*self.raw) = static_ref;
+        }
         static_ref
     }
 }
@@ -228,7 +230,10 @@ pub struct MetadataRegistrationBuilder {
 }
 
 impl MetadataRegistrationBuilder {
-    pub unsafe fn from_raw(raw: *mut *const Il2CppMetadataRegistration) -> Self {
+    pub unsafe fn from_raw(
+        raw: *mut *const Il2CppMetadataRegistration,
+        metadata_usages_count: u32,
+    ) -> Self {
         let mr = &**raw;
 
         Self {
@@ -258,7 +263,7 @@ impl MetadataRegistrationBuilder {
             .to_vec(),
             metadata_usages: slice::from_raw_parts(
                 mr.metadataUsages,
-                mr.metadataUsagesCount as usize,
+                metadata_usages_count as usize,
             )
             .to_vec(),
         }
@@ -285,7 +290,9 @@ impl MetadataRegistrationBuilder {
         (mr.metadataUsages, mr.metadataUsagesCount) = (mu.0, mu.1 as _);
 
         let static_ref = Box::leak(mr);
-        unsafe { (*self.raw) = static_ref; }
+        unsafe {
+            (*self.raw) = static_ref;
+        }
         static_ref
     }
 }

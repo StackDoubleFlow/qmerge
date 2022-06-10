@@ -46,10 +46,19 @@ pub extern "C" fn load_metadata(file_name: *const u8) -> *const u8 {
     let code_registration = xref::get_data_symbol("_ZL24s_Il2CppCodeRegistration").unwrap();
     let metadata_registration = xref::get_data_symbol("_ZL28s_Il2CppMetadataRegistration").unwrap();
 
-    let mut code_registration = unsafe { CodeRegistrationBuilder::from_raw(code_registration) };
-    let mut metadata_registration =
-        unsafe { MetadataRegistrationBuilder::from_raw(metadata_registration) };
     let mut metadata = unsafe { Metadata::from_raw(original_metadata) }.unwrap();
+    let mut code_registration = unsafe { CodeRegistrationBuilder::from_raw(code_registration) };
+    // The count saved in the Il2CppMetadataRegistration struct is seemingly incorrect, so we calculate our own
+    let metadata_usages_count = metadata
+        .metadata_usage_pairs
+        .iter()
+        .map(|pair| pair.destinationIndex)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let mut metadata_registration = unsafe {
+        MetadataRegistrationBuilder::from_raw(metadata_registration, metadata_usages_count)
+    };
 
     load_mods(
         &mut metadata,

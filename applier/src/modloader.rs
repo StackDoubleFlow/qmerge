@@ -14,7 +14,8 @@ use std::{ptr, str};
 
 static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
 static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
-static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> = SyncOnceCell::new();
+static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
+    SyncOnceCell::new();
 
 pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
     if (offset as i32) < 0 {
@@ -152,13 +153,14 @@ impl<'md> ModLoader<'md> {
                         flags: param.flags,
                     });
             }
-            self.metadata.generic_containers.push(Il2CppGenericContainer {
-                ownerIndex: owner_idx as i32,
-                type_argc: container.parameters.len() as i32,
-                is_method: matches!(container.owner, GenericContainerOwner::Method(_)) as i32,
-                genericParameterStart: generic_param_start as i32,
-                
-            });
+            self.metadata
+                .generic_containers
+                .push(Il2CppGenericContainer {
+                    ownerIndex: owner_idx as i32,
+                    type_argc: container.parameters.len() as i32,
+                    is_method: matches!(container.owner, GenericContainerOwner::Method(_)) as i32,
+                    genericParameterStart: generic_param_start as i32,
+                });
             idx as i32
         } else {
             -1
