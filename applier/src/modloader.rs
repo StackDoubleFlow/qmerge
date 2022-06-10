@@ -131,6 +131,7 @@ impl<'md> ModLoader<'md> {
     ) -> i32 {
         if let Some(container) = &generic_container {
             let idx = self.metadata.generic_containers.len();
+            let generic_param_start = self.metadata.generic_parameters.len();
             for (num, param) in container.parameters.iter().enumerate() {
                 let name = self.add_str(&param.name);
                 let constraints_start = self.metadata.generic_parameter_constraints.len();
@@ -143,7 +144,7 @@ impl<'md> ModLoader<'md> {
                 self.metadata
                     .generic_parameters
                     .push(Il2CppGenericParameter {
-                        ownerIndex: owner_idx as i32,
+                        ownerIndex: idx as i32,
                         nameIndex: name,
                         constraintsStart: constraints_start as i16,
                         constraintsCount: param.constraints.len() as i16,
@@ -151,6 +152,13 @@ impl<'md> ModLoader<'md> {
                         flags: param.flags,
                     });
             }
+            self.metadata.generic_containers.push(Il2CppGenericContainer {
+                ownerIndex: owner_idx as i32,
+                type_argc: container.parameters.len() as i32,
+                is_method: matches!(container.owner, GenericContainerOwner::Method(_)) as i32,
+                genericParameterStart: generic_param_start as i32,
+                
+            });
             idx as i32
         } else {
             -1
