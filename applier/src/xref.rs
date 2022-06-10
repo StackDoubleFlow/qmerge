@@ -158,8 +158,7 @@ pub fn get_symbol(name: &str) -> Result<*const ()> {
     } else if symbol_trace.start.starts_with("invoker:") {
         let parts: Vec<&str> = symbol_trace.start.split(':').collect();
         let root = get_root(parts[1], parts[2], parts[3].parse::<usize>()?)?;
-        root.invoker
-            .context("root does not have invoker pointer")?
+        root.invoker.context("root does not have invoker pointer")?
     } else {
         unsafe { LIBIL2CPP.symbol(&symbol_trace.start)? }
     };

@@ -12,7 +12,7 @@ use std::lazy::{SyncLazy, SyncOnceCell};
 use std::sync::Mutex;
 use std::{ptr, str};
 
-static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
+pub static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
 static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
 static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
     SyncOnceCell::new();
@@ -39,14 +39,14 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
 }
 
 pub struct Mod {
-    lib: Library,
-    refs: ModRefs,
+    pub lib: Library,
+    pub refs: ModRefs,
 }
 
 pub struct ModRefs {
-    type_def_refs: Vec<usize>,
-    type_refs: Vec<usize>,
-    method_refs: Vec<usize>,
+    pub type_def_refs: Vec<usize>,
+    pub type_refs: Vec<usize>,
+    pub method_refs: Vec<usize>,
 }
 
 pub struct ModLoader<'md> {

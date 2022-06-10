@@ -1,14 +1,34 @@
+use crate::il2cpp_types::MethodInfo;
+use crate::modloader::MODS;
+use crate::xref;
 use applier_proc_macro::proxy_codegen_api;
-use std::lazy::SyncLazy;
+use std::ffi::CStr;
+use std::lazy::{SyncLazy, SyncOnceCell};
 use std::mem::transmute;
 use std::os::raw::c_char;
 
-#[no_mangle]
-pub extern "C" fn merge_codegen_resolve_method(mod_id: *const c_char, method_ref_idx: usize) {
-    todo!();
+fn get_method_info_from_idx(idx: usize) -> &'static MethodInfo {
+    static FN_ADDR: SyncOnceCell<extern "C" fn(i32) -> *const MethodInfo> = SyncOnceCell::new();
+    let fn_addr = FN_ADDR.get_or_init(|| {
+        let addr = xref::get_symbol(
+            "_ZN6il2cpp2vm13MetadataCache38GetMethodInfoFromMethodDefinitionIndexEi",
+        )
+        .unwrap();
+        unsafe { transmute(addr) }
+    });
+    unsafe { &*fn_addr(idx as i32) }
 }
 
-use crate::xref;
+#[no_mangle]
+pub extern "C" fn merge_codegen_resolve_method(
+    mod_id: *const c_char,
+    method_ref_idx: usize,
+) -> Option<unsafe extern "C" fn()> {
+    let mod_id = unsafe { CStr::from_ptr(mod_id) }.to_str().unwrap();
+    let method_idx = MODS.lock().unwrap()[mod_id].refs.method_refs[method_ref_idx];
+    let method_info = get_method_info_from_idx(method_idx);
+    method_info.methodPointer
+}
 
 type P = *const ();
 
