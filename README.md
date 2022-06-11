@@ -61,3 +61,4 @@ These are some of people and their repositories that have been a tremendous help
 - [StackDoubleFlow](https://github.com/StackDoubleFlow) and [raftario](https://github.com/raftario) - [quest-hook-rs](https://github.com/StackDoubleFlow/quest-hook-rs)
 - [raftario](https://github.com/raftario) - [paranoid-android](https://github.com/raftario/paranoid-android)
 - [StackDoubleFlow](https://github.com/StackDoubleFlow) - [brocolib](https://github.com/StackDoubleFlow/brocolib), [xref_gen](https://github.com/StackDoubleFlow/xref_gen), [Merge](https://github.com/StackDoubleFlow/Merge)
+- [SamboyCoding](https://github.com/SamboyCoding) - [Cpp2IL](https://github.com/SamboyCoding/Cpp2IL)
