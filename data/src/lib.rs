@@ -214,7 +214,7 @@ pub struct GenericMethodFunctions {
 
 #[derive(Encode, Decode, Debug)]
 pub struct GenericClassInst {
-    pub class: TypeDefDescriptionIdx,
+    pub class: Option<TypeDefDescriptionIdx>,
     pub context: GenericContext,
 }
 

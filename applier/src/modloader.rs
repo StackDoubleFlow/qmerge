@@ -281,7 +281,10 @@ impl<'md> ModLoader<'md> {
             self.metadata_registration
                 .generic_classes
                 .push(Box::leak(Box::new(Il2CppGenericClass {
-                    typeDefinitionIndex: type_def_refs[gen_class.class] as i32,
+                    typeDefinitionIndex: gen_class
+                        .class
+                        .map(|idx| type_def_refs[idx] as i32)
+                        .unwrap_or(-1),
                     context: Il2CppGenericContext {
                         class_inst: gen_class.context.class.map_or(ptr::null(), |idx| {
                             self.metadata_registration.generic_insts[idx + gen_inst_offset]
@@ -325,14 +328,14 @@ impl<'md> ModLoader<'md> {
             }
             let methods_start = self.metadata.methods.len();
             for method in &ty_def.methods {
-                if ty_def.name == "Plugin" && method.name == "Load" && method.parameters.is_empty() {
+                if ty_def.name == "Plugin" && method.name == "Load" && method.parameters.is_empty()
+                {
                     let rid = 0x00FFFFFF & method.token;
-                    unsafe { 
+                    unsafe {
                         let code_gen_module = &*code_gen_module;
                         let f = code_gen_module.methodPointers.add(rid as usize - 1).read();
                         load_fn = f;
                     }
-
                 }
                 let method_idx = self.metadata.methods.len();
                 let params_start = self.metadata.parameters.len();

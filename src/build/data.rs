@@ -11,9 +11,9 @@ use il2cpp_metadata_raw::{
 use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
-    AddedTypeDefinition, CodeTableSizes, EncodedMethodIndex, GenericContainerOwner, GenericContext,
-    GenericInst, GenericMethodFunctions, GenericMethodInst, MergeModData, MethodDescription,
-    TypeDefDescription, TypeDescription, TypeDescriptionData,
+    AddedTypeDefinition, CodeTableSizes, EncodedMethodIndex, GenericClassInst,
+    GenericContainerOwner, GenericContext, GenericInst, GenericMethodFunctions, GenericMethodInst,
+    MergeModData, MethodDescription, TypeDefDescription, TypeDescription, TypeDescriptionData,
 };
 use std::collections::HashMap;
 use std::str;
@@ -68,6 +68,8 @@ pub struct RuntimeMetadata<'a> {
     pub gc_name_map: HashMap<&'a str, usize>,
 
     pub generic_insts: &'a [SourceGenericInst<'a>],
+    pub gi_name_map: HashMap<&'a str, usize>,
+
     pub generic_methods: &'a [GenericMethodSpec],
     pub generic_method_funcs: &'a [SrcGenericMethodFuncs],
 }
@@ -94,6 +96,9 @@ pub struct ModDataBuilder<'md, 'ty> {
     generic_methods: Vec<GenericMethodInst>,
     generic_method_map: HashMap<u32, usize>,
 
+    generic_classes: Vec<GenericClassInst>,
+    generic_class_map: HashMap<u32, usize>,
+
     generic_insts: Vec<GenericInst>,
     generic_inst_map: HashMap<u32, usize>,
 
@@ -115,6 +120,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             method_def_map: HashMap::new(),
             generic_methods: Vec::new(),
             generic_method_map: HashMap::new(),
+            generic_classes: Vec::new(),
+            generic_class_map: HashMap::new(),
             generic_insts: Vec::new(),
             generic_inst_map: HashMap::new(),
             mod_definitions: None,
@@ -341,7 +348,15 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 };
                 TypeDescriptionData::GenericParam(owner, param.num)
             }
-            _ => panic!("unsupported type: {:?}", ty),
+            Il2CppTypeData::Il2CppType(name) => {
+                let idx = self.runtime_metadata.ty_name_map[name];
+                TypeDescriptionData::TypeIdx(self.add_type(idx as u32)?)
+            }
+            Il2CppTypeData::Il2CppArrayType(_) => todo!("non-sz arrays"),
+            Il2CppTypeData::Il2CppGenericClass(name) => {
+                let idx = self.runtime_metadata.gc_name_map[name];
+                TypeDescriptionData::GenericClass(self.add_generic_class(idx as u32)?)
+            }
         };
 
         let desc_idx = self.added_types.len();
@@ -547,6 +562,36 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         };
         self.generic_insts.push(desc);
         self.generic_inst_map.insert(idx, desc_idx);
+        Ok(desc_idx)
+    }
+
+    fn add_generic_class(&mut self, idx: u32) -> Result<usize> {
+        if self.generic_class_map.contains_key(&idx) {
+            return Ok(self.generic_class_map[&idx]);
+        }
+
+        let generic_class = &self.runtime_metadata.generic_classes[idx as usize];
+
+        let desc_idx = self.generic_classes.len();
+        let desc = GenericClassInst {
+            class: if let Some(ty_def_idx) = generic_class.ty_def_idx {
+                Some(self.add_type_def(ty_def_idx as u32)?)
+            } else {
+                None
+            },
+            context: GenericContext {
+                class: if let Some(inst_name) = generic_class.class_inst {
+                    let isnt_idx = self.runtime_metadata.gi_name_map[inst_name];
+                    Some(self.add_generic_inst(isnt_idx as u32)?)
+                } else {
+                    None
+                },
+                method: None,
+            },
+        };
+
+        self.generic_classes.push(desc);
+        self.generic_class_map.insert(idx, desc_idx);
         Ok(desc_idx)
     }
 

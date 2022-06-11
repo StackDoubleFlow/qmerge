@@ -287,7 +287,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         gc_name_map,
     } = runtime_metadata::parse(&types_src, &gct_src)?;
     let gid_src = fs::read_to_string(cpp_path.join("Il2CppGenericInstDefinitions.c"))?;
-    let generic_insts = runtime_metadata::parse_inst_defs(&gid_src)?;
+    let (generic_insts, gi_name_map) = runtime_metadata::parse_inst_defs(&gid_src)?;
     let gmd_src = fs::read_to_string(cpp_path.join("Il2CppGenericMethodDefinitions.c"))?;
     let generic_method_defs = runtime_metadata::parse_generic_method_defs(&gmd_src)?;
     let gmt_src = fs::read_to_string(cpp_path.join("Il2CppGenericMethodTable.c"))?;
@@ -299,6 +299,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         generic_classes: &generic_classes,
         gc_name_map,
         generic_insts: &generic_insts,
+        gi_name_map,
         generic_methods: &generic_method_defs,
         generic_method_funcs: &generic_method_table,
     };

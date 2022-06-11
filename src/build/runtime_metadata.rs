@@ -121,8 +121,8 @@ pub struct Il2CppType<'src> {
 }
 
 pub struct GenericClass<'src> {
-    pub ty_def_idx: usize,
-    pub class_inst: &'src str,
+    pub ty_def_idx: Option<usize>,
+    pub class_inst: Option<&'src str>,
 }
 
 pub struct TypeDefinitionsFile<'src> {
@@ -173,13 +173,21 @@ pub fn parse<'src>(src: &'src str, gct_src: &'src str) -> Result<TypeDefinitions
         } else if line.starts_with("Il2CppGenericClass ") {
             let words: Vec<&str> = line.split_whitespace().collect();
             let name = words[1];
-            let ty_def_idx = words[4].trim_end_matches(',').parse()?;
+            let ty_def_idx = words[4].trim_end_matches(',').parse::<isize>()?;
             let class_inst = words[6].trim_start_matches('&').trim_end_matches(',');
             generic_classes.insert(
                 name,
                 GenericClass {
-                    ty_def_idx,
-                    class_inst,
+                    ty_def_idx: if ty_def_idx != -1 {
+                        Some(ty_def_idx as usize)
+                    } else {
+                        None
+                    },
+                    class_inst: if class_inst == "NULL" {
+                        None
+                    } else {
+                        Some(class_inst)
+                    },
                 },
             );
         }
@@ -234,7 +242,7 @@ pub struct SourceGenericInst<'src> {
     pub types: Vec<&'src str>,
 }
 
-pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
+pub fn parse_inst_defs(src: &str) -> Result<(Vec<SourceGenericInst>, HashMap<&str, usize>)> {
     let mut insts = HashMap::new();
     let insts_start = match src.find("static const Il2CppType* ") {
         Some(insts_start) => insts_start,
@@ -261,15 +269,17 @@ pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
         insts.insert(name, SourceGenericInst { types });
     }
 
+    let mut name_map = HashMap::new();
     let mut arr = Vec::new();
     let arr_start = src
         .find("const Il2CppGenericInst* const g_Il2CppGenericInstTable")
         .context("could not find g_Il2CppGenericInstTable")?;
-    for line in src[arr_start..].lines().skip(3) {
+    for (i, line) in src[arr_start..].lines().skip(3).enumerate() {
         if line.starts_with('}') {
             break;
         }
         let name = line.trim().trim_start_matches('&').trim_end_matches(',');
+        name_map.insert(name, i);
         arr.push(
             insts
                 .remove(name)
@@ -277,7 +287,7 @@ pub fn parse_inst_defs(src: &str) -> Result<Vec<SourceGenericInst>> {
         );
     }
 
-    Ok(arr)
+    Ok((arr, name_map))
 }
 
 pub struct GenericMethodSpec {
