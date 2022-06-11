@@ -9,7 +9,6 @@ use std::fs;
 use std::path::Path;
 use std::str::Lines;
 
-// TODO: Figure out lifetimes for strings and use string slices for maps
 #[derive(Default)]
 pub struct ModFunctionUsages<'a> {
     // Mapping from name to method def metadata idx
