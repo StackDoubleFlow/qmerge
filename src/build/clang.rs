@@ -96,7 +96,7 @@ impl<'a> CompileCommand<'a> {
 
         let mut command = self.base_command(true);
         command
-            .args(&["-shared", "-static-libstdc++"])
+            .args(&["-shared", "-static-libstdc++", "-Wl,--no-undefined"])
             .arg("-o")
             .arg(&self.output_path)
             // TODO: Get path to applier binary
