@@ -1,5 +1,5 @@
 use super::clang::CompileCommand;
-use super::invokers::ModFunctionUsages;
+use super::function_usages::ModFunctionUsages;
 use super::{add_cpp_ty, find_struct_defs, FnDecl, StructDef};
 use crate::build::try_parse_call;
 use anyhow::{bail, Result};

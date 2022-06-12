@@ -1,4 +1,4 @@
-use super::invokers::ModFunctionUsages;
+use super::function_usages::ModFunctionUsages;
 use super::runtime_metadata::{
     GenericClass, GenericMethodSpec, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
     SrcGenericMethodFuncs,

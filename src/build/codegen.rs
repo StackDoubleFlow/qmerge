@@ -1,6 +1,6 @@
 use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
-use super::invokers::ModFunctionUsages;
+use super::function_usages::ModFunctionUsages;
 use anyhow::{bail, Context, Result};
 use std::fmt::Write;
 use std::fs;
