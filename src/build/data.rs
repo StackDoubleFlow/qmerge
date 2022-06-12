@@ -503,7 +503,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             generic_instances: self.generic_insts,
             generic_method_insts: self.generic_methods,
             generic_method_funcs: generic_funcs,
-            generic_class_insts: Vec::new(), // TODO
+            generic_class_insts: self.generic_classes,
         })
     }
 
