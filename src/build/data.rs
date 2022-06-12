@@ -15,7 +15,7 @@ use merge_data::{
     GenericContainerOwner, GenericContext, GenericInst, GenericMethodFunctions, GenericMethodInst,
     MergeModData, MethodDescription, TypeDefDescription, TypeDescription, TypeDescriptionData,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str;
 
 pub fn offset_len(offset: u32, len: u32) -> std::ops::Range<usize> {
@@ -632,5 +632,45 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             6 => EncodedMethodIndex::MethodRef(self.add_generic_method(idx)?),
             _ => bail!("Unsupported encoded method index with type {}", ty),
         })
+    }
+
+    pub fn check_for_shims<'a>(
+        &self,
+        funcs: HashSet<&'a str>,
+        method_ptrs: &[&str],
+        shims: &HashSet<String>,
+    ) -> Result<HashMap<&'a str, bool>> {
+        // TODO: There has to be a faster way to do this
+        let mut method_map = vec![false; self.metadata.methods.len()];
+        for image in &self.metadata.images {
+            let name = self.get_str(image.name_index)?;
+            let is_shim = shims.contains(name);
+            let ty_def_range = offset_len(image.type_start, image.type_count);
+            for ty_def in &self.metadata.type_definitions[ty_def_range] {
+                let method_range = offset_len(ty_def.method_start, ty_def.method_count as u32);
+                method_map[method_range]
+                    .iter_mut()
+                    .for_each(|is| *is = is_shim);
+            }
+        }
+
+        let mut map = HashMap::new();
+        for func in funcs {
+            let func_idx = method_ptrs
+                .iter()
+                .position(|&s| s == func)
+                .context("Could not find func in gen method ptr table")?;
+            let gen_method_idx = self
+                .runtime_metadata
+                .generic_method_funcs
+                .iter()
+                .find_map(|funcs| {
+                    (funcs.method_idx == func_idx).then_some(funcs.generic_method_idx)
+                })
+                .context("could not find use of generic func")?;
+            let method_idx = self.runtime_metadata.generic_methods[gen_method_idx].method_def;
+            map.insert(func, method_map[method_idx]);
+        }
+        Ok(map)
     }
 }

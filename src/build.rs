@@ -1,8 +1,8 @@
 mod clang;
 mod codegen;
 mod data;
-mod generics;
 mod function_usages;
+mod generics;
 mod metadata_usage;
 mod parser;
 mod runtime_metadata;
@@ -12,8 +12,8 @@ use crate::config::{Mod, APPS, CONFIG};
 use anyhow::{bail, Context, Result};
 use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder, RuntimeMetadata};
-use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use function_usages::ModFunctionUsages;
+use il2cpp_metadata_raw::{Il2CppImageDefinition, Metadata};
 use merge_data::CodeTableSizes;
 use parser::{is_included_ty, try_parse_call, FnDecl};
 use runtime_metadata::TypeDefinitionsFile;
@@ -422,11 +422,18 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     }
     let (_, struct_defs) = find_struct_defs(&extern_code_sources);
 
+    let gen_method_ptrs_src =
+        fs::read_to_string(cpp_path.join("Il2CppGenericMethodPointerTable.cpp"))?;
+    let gen_method_ptr_table = generics::read_method_ptr_table(&gen_method_ptrs_src)?;
+
     let generic_transform_data = generics::transform(
         &mut function_usages,
+        &mut data_builder,
         &mut metadata_usage_names,
         &generic_source_names,
         &generic_sources,
+        &gen_method_ptr_table,
+        &app.shims,
     )?;
 
     let (usage_fds, usages_len) = metadata_usage::transform(
@@ -463,7 +470,11 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
     dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
-    function_usages.write_generic_func_table(&mut compile_command, transformed_path, cpp_path)?;
+    function_usages.write_generic_func_table(
+        &mut compile_command,
+        transformed_path,
+        &gen_method_ptr_table,
+    )?;
     function_usages.write_generic_adj_thunk_table(
         &mut compile_command,
         transformed_path,

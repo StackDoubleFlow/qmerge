@@ -2,7 +2,7 @@ use crate::error::exit_on_err;
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::lazy::SyncLazy;
 use std::path::{Path, PathBuf};
@@ -52,6 +52,7 @@ fn config_dir() -> Result<PathBuf> {
 #[derive(Deserialize, Debug)]
 pub struct AppConfig {
     pub unity_version: String,
+    pub shims: HashSet<String>,
 }
 
 #[derive(Deserialize, Debug)]

@@ -1,12 +1,34 @@
 use super::clang::CompileCommand;
+use super::data::ModDataBuilder;
 use super::function_usages::ModFunctionUsages;
 use super::{add_cpp_ty, find_struct_defs, FnDecl, StructDef};
 use crate::build::try_parse_call;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
+
+pub fn read_method_ptr_table(src: &str) -> Result<Vec<&str>> {
+    let mut methods = Vec::new();
+
+    if let Some(arr_start) = src.find("const Il2CppMethodPointer g_Il2CppGenericMethodPointers") {
+        for line in src[arr_start..].lines().skip(3) {
+            if line.starts_with('}') {
+                break;
+            }
+            let name = line
+                .trim()
+                .trim_start_matches("(Il2CppMethodPointer)&")
+                .split('/')
+                .next()
+                .context("malformed generic method pointer table")?;
+            methods.push(name);
+        }
+    };
+
+    Ok(methods)
+}
 
 fn process_line<'a>(
     line: &'a str,
@@ -93,14 +115,17 @@ pub struct GenericTransformData<'a> {
     struct_defs: HashMap<&'a str, StructDef<'a>>,
     generic_invoker_templates: HashMap<&'a str, String>,
     def_src_map: HashMap<&'a str, usize>,
-    funcs: HashSet<&'a str>,
+    funcs: HashMap<&'a str, bool>,
 }
 
 pub fn transform<'a>(
     function_usages: &mut ModFunctionUsages<'a>,
+    data_builder: &mut ModDataBuilder,
     metadata_usage_names: &mut HashSet<String>,
     source_names: &'a [String],
     sources: &'a [String],
+    method_ptrs: &[&str],
+    shims: &HashSet<String>,
 ) -> Result<GenericTransformData<'a>> {
     let mut inline_functions = HashSet::new();
     let mut def_src_map = HashMap::new();
@@ -197,7 +222,7 @@ pub fn transform<'a>(
         struct_fds,
         struct_defs,
         generic_invoker_templates,
-        funcs: visited,
+        funcs: data_builder.check_for_shims(visited, method_ptrs, shims)?,
         def_src_map,
     })
 }
@@ -259,7 +284,7 @@ pub fn write(
                 continue;
             }
             if let Some(fn_def) = FnDecl::try_parse(line) {
-                if funcs.contains(fn_def.name) {
+                if let Some(&stub) = funcs.get(fn_def.name) {
                     let source_name = &source_names[def_src_map[fn_def.name]];
                     writeln!(
                         external_src,
@@ -267,11 +292,15 @@ pub fn write(
                         get_md_usage_name(fn_def.name, source_name)
                     )?;
                     writeln!(external_src, "{}", line)?;
-                    loop {
-                        let line = lines.next().unwrap();
-                        writeln!(external_src, "{}", line)?;
-                        if line == "}" {
-                            break;
+                    if stub {
+                        write_shim(&mut external_src, fn_def)?;
+                    } else {
+                        loop {
+                            let line = lines.next().unwrap();
+                            writeln!(external_src, "{}", line)?;
+                            if line == "}" {
+                                break;
+                            }
                         }
                     }
                 }
@@ -283,5 +312,28 @@ pub fn write(
     fs::write(&new_path, external_src)?;
     compile_command.add_source(new_path);
 
+    Ok(())
+}
+
+fn write_shim(str: &mut String, fn_decl: FnDecl) -> Result<()> {
+    writeln!(str, "{{")?;
+    let params = fn_decl
+        .params
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .split(',')
+        .map(|param| param.split_whitespace().last())
+        .collect::<Option<Vec<&str>>>()
+        .unwrap()
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>()
+        .join(", ");
+    writeln!(
+        str,
+        "    return (({} (*){})(method->methodPointer))({});",
+        fn_decl.return_ty, fn_decl.params, params
+    )?;
+    writeln!(str, "}}\n")?;
     Ok(())
 }

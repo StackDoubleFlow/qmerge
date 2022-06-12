@@ -36,7 +36,7 @@ pub fn upload() -> Result<()> {
         mod_config.app, mod_config.id
     );
     ensure_dir_exists(&mod_dir)?;
-    let out_path = PathBuf::from("./build/out");
+    let out_path = PathBuf::from("./build/bin/out");
 
     let mmd_name = format!("{}.mmd", mod_config.id);
     let so_name = format!("{}.so", mod_config.id);

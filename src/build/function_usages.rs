@@ -238,35 +238,15 @@ impl<'a> ModFunctionUsages<'a> {
         &self,
         compile_command: &mut CompileCommand,
         transformed_path: &Path,
-        cpp_path: &Path,
+        funcs: &[&str],
     ) -> Result<()> {
-        let src = fs::read_to_string(cpp_path.join("Il2CppGenericMethodPointerTable.cpp"))?;
-
-        let mut methods = Vec::new();
-
-        if let Some(arr_start) = src.find("const Il2CppMethodPointer g_Il2CppGenericMethodPointers")
-        {
-            for line in src[arr_start..].lines().skip(3) {
-                if line.starts_with('}') {
-                    break;
-                }
-                let name = line
-                    .trim()
-                    .trim_start_matches("(Il2CppMethodPointer)&")
-                    .split('/')
-                    .next()
-                    .context("malformed generic method pointer table")?;
-                methods.push(name);
-            }
-        };
-
         let mut new_src = String::new();
         writeln!(new_src, "#include \"codegen/il2cpp-codegen.h\"")?;
         writeln!(new_src, "#include \"merge/codegen.h\"")?;
         writeln!(new_src)?;
 
         for &idx in &self.required_generic_funcs {
-            writeln!(new_src, "IL2CPP_EXTERN_C void {} ();", methods[idx])?;
+            writeln!(new_src, "IL2CPP_EXTERN_C void {} ();", funcs[idx])?;
         }
         writeln!(
             new_src,
@@ -279,7 +259,7 @@ impl<'a> ModFunctionUsages<'a> {
         )?;
         writeln!(new_src, "{{")?;
         for &idx in &self.required_generic_funcs {
-            writeln!(new_src, "    (Il2CppMethodPointer)&{},", methods[idx])?;
+            writeln!(new_src, "    (Il2CppMethodPointer)&{},", funcs[idx])?;
         }
         writeln!(new_src, "}};")?;
 

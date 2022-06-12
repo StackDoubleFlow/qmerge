@@ -81,7 +81,7 @@ impl<'md> ModLoader<'md> {
             code_registration,
             metadata_registration,
             type_def_map,
-            method_spec_map
+            method_spec_map,
         })
     }
 
