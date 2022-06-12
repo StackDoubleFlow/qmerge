@@ -50,6 +50,8 @@ impl<'a> FnDecl<'a> {
             (line, false)
         } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C inline IL2CPP_METHOD_ATTR") {
             (line, true)
+        } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C") {
+            (line, false)
         } else {
             (
                 line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR")?,

@@ -235,6 +235,7 @@ pub fn write(
     source_names: &[String],
     sources: &[String],
     function_usages: &ModFunctionUsages,
+    required_adj_thunks: HashSet<String>,
 ) -> Result<()> {
     let mut external_src = String::new();
     writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
@@ -301,6 +302,15 @@ pub fn write(
                             if line == "}" {
                                 break;
                             }
+                        }
+                    }
+                } else if required_adj_thunks.contains(fn_def.name) {
+                    writeln!(external_src, "{}", line)?;
+                    loop {
+                        let line = lines.next().unwrap();
+                        writeln!(external_src, "{}", line)?;
+                        if line == "}" {
+                            break;
                         }
                     }
                 }

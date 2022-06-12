@@ -275,7 +275,7 @@ impl<'a> ModFunctionUsages<'a> {
         compile_command: &mut CompileCommand,
         transformed_path: &Path,
         cpp_path: &Path,
-    ) -> Result<()> {
+    ) -> Result<HashSet<String>> {
         let src = fs::read_to_string(cpp_path.join("Il2CppGenericAdjustorThunkTable.cpp"))?;
 
         let mut methods = Vec::new();
@@ -312,12 +312,16 @@ impl<'a> ModFunctionUsages<'a> {
         for &idx in &self.required_generic_adj_thunks {
             writeln!(new_src, "    {},", methods[idx])?;
         }
-        writeln!(new_src, "}};")?;
+        writeln!(new_src, "}};\n")?;
 
         let new_path = transformed_path.join("Il2CppGenericAdjustorThunkTable.cpp");
         fs::write(&new_path, new_src)?;
         compile_command.add_source(new_path);
 
-        Ok(())
+        Ok(self
+            .required_generic_adj_thunks
+            .iter()
+            .map(|&idx| methods[idx].to_string())
+            .collect())
     }
 }

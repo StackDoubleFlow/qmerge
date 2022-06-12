@@ -444,16 +444,6 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         metadata_usage_names,
     )?;
 
-    generics::write(
-        generic_transform_data,
-        transformed_path,
-        &mut compile_command,
-        &usage_fds,
-        &generic_source_names,
-        &generic_sources,
-        &function_usages,
-    )?;
-
     function_usages.write_external(
         &mut compile_command,
         &mod_config.id,
@@ -468,17 +458,27 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         metadata_usages: usages_len,
     };
     let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
-    dbg!(&mod_data);
+    // dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(
         &mut compile_command,
         transformed_path,
         &gen_method_ptr_table,
     )?;
-    function_usages.write_generic_adj_thunk_table(
+    let gen_adj_thunks = function_usages.write_generic_adj_thunk_table(
         &mut compile_command,
         transformed_path,
         cpp_path,
+    )?;
+    generics::write(
+        generic_transform_data,
+        transformed_path,
+        &mut compile_command,
+        &usage_fds,
+        &generic_source_names,
+        &generic_sources,
+        &function_usages,
+        gen_adj_thunks,
     )?;
     type_sizes::transform(&mut compile_command, mod_image, cpp_path, transformed_path)?;
 
