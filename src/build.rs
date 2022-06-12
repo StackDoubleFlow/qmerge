@@ -241,20 +241,24 @@ pub fn build(regen_cpp: bool) -> Result<()> {
     let mono_path = unity_path.join("Editor/Data/MonoBleedingEdge/bin/mono");
     let il2cpp_path = unity_path.join("Editor/Data/il2cpp/build/deploy/net471/il2cpp.exe");
 
-    let cpp_path = Path::new("./build/cpp");
-    let transformed_path = Path::new("./build/transformed");
-    let out_path = Path::new("./build/out");
+    let transformed_path = Path::new("./build/sources/transformed");
+    let out_path = Path::new("./build/bin/out");
+    let obj_path = Path::new("./build/bin/obj");
     fs::create_dir_all(transformed_path)?;
     fs::create_dir_all(out_path)?;
+    fs::create_dir_all(obj_path)?;
 
-    let include_path = Path::new("./build/include");
+    let include_path = Path::new("./build/sources/include");
     fs::create_dir_all(include_path.join("merge"))?;
     fs::write(include_path.join("merge/codegen.h"), CODGEN_HEADER)?;
 
-    let mut compile_command = CompileCommand::new(out_path.join(format!("{}.so", mod_config.id)));
+    let output_so_path = out_path.join(format!("{}.so", mod_config.id));
+    let target = "aarch64-linux-android21";
+    let mut compile_command = CompileCommand::new(output_so_path, obj_path, target);
     compile_command.add_include_path(unity_path.join("Editor/Data/il2cpp/libil2cpp"));
     compile_command.add_include_path(include_path.into());
 
+    let cpp_path = Path::new("./build/sources/cpp");
     if regen_cpp {
         if cpp_path.exists() {
             fs::remove_dir_all(&cpp_path)?;
@@ -266,12 +270,12 @@ pub fn build(regen_cpp: bool) -> Result<()> {
             .arg(il2cpp_path)
             .arg("--convert-to-cpp")
             .arg("--directory=./build/Managed")
-            .arg("--generatedcppdir=./build/cpp")
+            .arg("--generatedcppdir=./build/sources/cpp")
             .status()
             .context("il2cpp command failed")?;
     }
 
-    let metadata_data = fs::read("./build/cpp/Data/Metadata/global-metadata.dat")
+    let metadata_data = fs::read(cpp_path.join("Data/Metadata/global-metadata.dat"))
         .context("failed to read generated metadata")?;
     let metadata = il2cpp_metadata_raw::deserialize(&metadata_data)
         .context("failed to deserialize generated metadata")?;

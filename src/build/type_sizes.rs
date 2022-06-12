@@ -13,7 +13,11 @@ pub fn transform(
     transformed_path: &Path,
 ) -> Result<()> {
     let mut values_source_names = Vec::new();
-    get_numbered_paths(&mut values_source_names, cpp_path, "Il2CppCompilerCalculateTypeValues");
+    get_numbered_paths(
+        &mut values_source_names,
+        cpp_path,
+        "Il2CppCompilerCalculateTypeValues",
+    );
     for name in &values_source_names {
         let src_path = cpp_path.join(name).with_extension("cpp");
         let src = fs::read_to_string(&src_path)?;

@@ -1,7 +1,7 @@
 ﻿using Mono.Cecil;
 
 // TODO: cli interface thing
-var publicizeMethods = true;
+var publicizeMethods = false;
 var managedPath = "/home/stack/ledump/QuestModding/qmerge/example_mod/build/Managed/";
 var inputPath = "/home/stack/ledump/QuestModding/qmerge/test_analysis/cpp2il_out";
 
