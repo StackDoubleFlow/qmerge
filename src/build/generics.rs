@@ -147,7 +147,7 @@ pub fn transform<'a>(
                     def_src_map.insert(fn_def.name, src_idx);
                 }
             } else if line.starts_with("inline") {
-                function_usages.read_gshared_proxy(line, &mut lines);
+                function_usages.add_gshared_proxy(line, &mut lines);
             }
         }
     }
@@ -277,6 +277,10 @@ pub fn write(
         writeln!(external_src, "{};", fd)?;
     }
     writeln!(external_src)?;
+    for &func in funcs.keys() {
+        let fd = function_usages.forward_decls[func];
+        writeln!(external_src, "{};", fd)?;
+    }
 
     for src in sources {
         let mut lines = src.lines();
@@ -311,6 +315,20 @@ pub fn write(
                         writeln!(external_src, "{}", line)?;
                         if line == "}" {
                             break;
+                        }
+                    }
+                }
+            } else if line.starts_with("inline") {
+                let proxy_name = function_usages.parse_gshared_proxy_decl(line);
+                if let Some(&name) = function_usages.generic_proxies.get(proxy_name) {
+                    if funcs.contains_key(name) {
+                        writeln!(external_src, "{}", line)?;
+                        loop {
+                            let line = lines.next().unwrap();
+                            writeln!(external_src, "{}", line)?;
+                            if line == "}" {
+                                break;
+                            }
                         }
                     }
                 }

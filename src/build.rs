@@ -397,7 +397,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
                     get_function_usages(&mut mod_usages, &mut lines);
                 }
             } else if line.starts_with("inline") {
-                function_usages.read_gshared_proxy(line, &mut lines);
+                function_usages.add_gshared_proxy(line, &mut lines);
             }
         }
     }

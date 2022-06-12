@@ -58,9 +58,13 @@ impl<'a> ModFunctionUsages<'a> {
         Ok(())
     }
 
-    pub fn read_gshared_proxy(&mut self, line: &'a str, lines: &mut Lines<'a>) {
+    pub fn parse_gshared_proxy_decl(&self, line: &'a str) -> &'a str {
         let words = line.split_whitespace().collect::<Vec<_>>();
-        let proxy_name = words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1];
+        words[words.iter().position(|w| w.starts_with('(')).unwrap() - 1]
+    }
+
+    pub fn add_gshared_proxy(&mut self, line: &'a str, lines: &mut Lines<'a>) {
+        let proxy_name = self.parse_gshared_proxy_decl(line);
         lines.next().unwrap();
         let line = lines.next().unwrap().trim();
         let name_start = line.find("))").unwrap() + 2;
