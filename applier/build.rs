@@ -20,6 +20,9 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
+        // TODO: Can I derive these for specific types only?
+        .derive_eq(true)
+        .derive_hash(true)
         .generate()
         .expect("Unable to generate bindings");
 

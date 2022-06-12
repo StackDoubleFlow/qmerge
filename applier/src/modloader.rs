@@ -57,6 +57,7 @@ pub struct ModLoader<'md> {
     metadata_registration: &'md mut MetadataRegistrationBuilder,
     // TODO: use string data from original metadata
     type_def_map: HashMap<(String, String), usize>,
+    method_spec_map: HashMap<Il2CppMethodSpec, usize>,
 }
 
 impl<'md> ModLoader<'md> {
@@ -71,11 +72,16 @@ impl<'md> ModLoader<'md> {
             let name = get_str(&metadata.string, type_def.nameIndex as usize)?;
             type_def_map.insert((namespace.to_string(), name.to_string()), i);
         }
+        let mut method_spec_map = HashMap::new();
+        for (i, method_spec) in metadata_registration.method_specs.iter().enumerate() {
+            method_spec_map.insert(*method_spec, i);
+        }
         Ok(Self {
             metadata,
             code_registration,
             metadata_registration,
             type_def_map,
+            method_spec_map
         })
     }
 
@@ -105,7 +111,7 @@ impl<'md> ModLoader<'md> {
         mod_data: &MergeModData,
         type_refs: &[usize],
         method_refs: &[usize],
-        gen_method_offset: usize,
+        gen_methods: &[usize],
     ) -> u32 {
         match eidx {
             EncodedMethodIndex::Il2CppClass(idx) => type_refs[idx] as u32 | 0x20000000,
@@ -122,7 +128,7 @@ impl<'md> ModLoader<'md> {
                 self.add_str_literal(str);
                 literal_idx as u32 | 0xA0000000
             }
-            EncodedMethodIndex::MethodRef(idx) => (idx + gen_method_offset) as u32 | 0xC0000000,
+            EncodedMethodIndex::MethodRef(idx) => gen_methods[idx] as u32 | 0xC0000000,
         }
     }
 
@@ -473,20 +479,26 @@ impl<'md> ModLoader<'md> {
         }
 
         let gen_method_offset = self.metadata_registration.method_specs.len();
+        let mut gen_methods = Vec::with_capacity(mod_data.generic_method_insts.len());
         for gen_method in &mod_data.generic_method_insts {
-            self.metadata_registration
-                .method_specs
-                .push(Il2CppMethodSpec {
-                    methodDefinitionIndex: method_refs[gen_method.method] as i32,
-                    classIndexIndex: gen_method
-                        .context
-                        .class
-                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
-                    methodIndexIndex: gen_method
-                        .context
-                        .method
-                        .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
-                });
+            let method_spec = Il2CppMethodSpec {
+                methodDefinitionIndex: method_refs[gen_method.method] as i32,
+                classIndexIndex: gen_method
+                    .context
+                    .class
+                    .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
+                methodIndexIndex: gen_method
+                    .context
+                    .method
+                    .map_or(-1, |idx| (idx + gen_inst_offset) as i32),
+            };
+            if let Some(&idx) = self.method_spec_map.get(&method_spec) {
+                gen_methods.push(idx);
+            } else {
+                let idx = self.metadata_registration.method_specs.len();
+                self.metadata_registration.method_specs.push(method_spec);
+                gen_methods.push(idx);
+            }
         }
         let mod_adj_thunks: *const Il2CppMethodPointer =
             unsafe { lib.symbol("g_Il2CppGenericAdjustorThunks")? };
@@ -513,6 +525,12 @@ impl<'md> ModLoader<'md> {
             self.code_registration.invoker_pointers.push(method_pointer);
         }
         for gen_method_funcs in &mod_data.generic_method_funcs {
+            let idx = gen_methods[gen_method_funcs.generic_method];
+            if idx < gen_method_offset {
+                // We're using a generic method instance that the game already has
+                // no need to add our own function (it could possibly be a stub anyways)
+                continue;
+            }
             self.metadata_registration.generic_method_table.push(
                 Il2CppGenericMethodFunctionsDefinitions {
                     genericMethodIndex: (gen_method_funcs.generic_method + gen_method_offset)
@@ -560,7 +578,7 @@ impl<'md> ModLoader<'md> {
                     mod_data,
                     &type_refs,
                     &method_refs,
-                    gen_method_offset,
+                    &gen_methods,
                 );
                 self.metadata.vtable_methods.push(new_eidx);
             }
@@ -672,7 +690,7 @@ impl<'md> ModLoader<'md> {
                     mod_data,
                     &type_refs,
                     &method_refs,
-                    gen_method_offset,
+                    &gen_methods,
                 );
                 self.metadata
                     .metadata_usage_pairs
