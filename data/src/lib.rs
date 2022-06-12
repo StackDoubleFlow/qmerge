@@ -1,6 +1,7 @@
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 
+type ImageDescriptionIdx = usize;
 type TypeDescriptionIdx = usize;
 type TypeDefDescriptionIdx = usize;
 type MethodDescriptionIdx = usize;
@@ -11,7 +12,13 @@ type GenericMethodInstIdx = usize;
 type GenericClassInstIdx = usize;
 
 #[derive(Encode, Decode, Debug)]
+pub struct ImageDescription {
+    pub name: String,
+}
+
+#[derive(Encode, Decode, Debug)]
 pub struct TypeDefDescription {
+    pub image: ImageDescriptionIdx,
     pub name: String,
     pub namespace: String,
 }
@@ -231,6 +238,7 @@ pub struct MergeModData {
     pub code_table_sizes: CodeTableSizes,
 
     // Linkage information
+    pub image_descriptions: Vec<ImageDescription>,
     pub type_def_descriptions: Vec<TypeDefDescription>,
     pub type_descriptions: Vec<TypeDescription>,
     pub method_descriptions: Vec<MethodDescription>,

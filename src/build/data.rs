@@ -13,7 +13,8 @@ use merge_data::{
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
     AddedTypeDefinition, CodeTableSizes, EncodedMethodIndex, GenericClassInst,
     GenericContainerOwner, GenericContext, GenericInst, GenericMethodFunctions, GenericMethodInst,
-    MergeModData, MethodDescription, TypeDefDescription, TypeDescription, TypeDescriptionData,
+    ImageDescription, MergeModData, MethodDescription, TypeDefDescription, TypeDescription,
+    TypeDescriptionData,
 };
 use std::collections::{HashMap, HashSet};
 use std::str;
@@ -84,6 +85,9 @@ pub struct ModDataBuilder<'md, 'ty> {
     pub metadata: &'md Metadata<'md>,
     runtime_metadata: RuntimeMetadata<'ty>,
 
+    images: Vec<ImageDescription>,
+    image_map: HashMap<u32, usize>,
+
     type_definitions: Vec<TypeDefDescription>,
     type_def_map: HashMap<u32, usize>,
 
@@ -112,6 +116,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         ModDataBuilder {
             metadata,
             runtime_metadata,
+            images: Vec::new(),
+            image_map: HashMap::new(),
             type_definitions: Vec::new(),
             type_def_map: HashMap::new(),
             added_types: Vec::new(),
@@ -293,17 +299,41 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(())
     }
 
+    pub fn add_image(&mut self, idx: u32) -> Result<usize> {
+        if self.image_map.contains_key(&idx) {
+            return Ok(self.image_map[&idx]);
+        }
+
+        let image = &self.metadata.images[idx as usize];
+        let name = get_str(self.metadata.string, image.name_index as usize)?;
+
+        let desc_idx = self.images.len();
+        let desc = ImageDescription {
+            name: name.to_owned(),
+        };
+        self.images.push(desc);
+        self.image_map.insert(idx, desc_idx);
+        Ok(desc_idx)
+    }
+
     pub fn add_type_def(&mut self, idx: u32) -> Result<usize> {
         if self.type_def_map.contains_key(&idx) {
             return Ok(self.type_def_map[&idx]);
         }
 
         let type_def = &self.metadata.type_definitions[idx as usize];
+        let image_idx = self
+            .metadata
+            .images
+            .iter()
+            .position(|image| image.type_start <= idx && image.type_start + image.type_count > idx)
+            .context("could not find image type def belongs to")? as u32;
         let name = get_str(self.metadata.string, type_def.name_index as usize)?;
         let namespace = get_str(self.metadata.string, type_def.namespace_index as usize)?;
 
         let desc_idx = self.type_definitions.len();
         let desc = TypeDefDescription {
+            image: self.add_image(image_idx)?,
             name: name.to_owned(),
             namespace: namespace.to_owned(),
         };
@@ -490,6 +520,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(MergeModData {
             code_table_sizes,
 
+            image_descriptions: self.images,
             type_def_descriptions: self.type_definitions,
             type_descriptions: self.added_types,
             method_descriptions: self.methods,

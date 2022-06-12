@@ -55,8 +55,7 @@ pub struct ModLoader<'md> {
     metadata: &'md mut Metadata,
     code_registration: &'md mut CodeRegistrationBuilder,
     metadata_registration: &'md mut MetadataRegistrationBuilder,
-    // TODO: use string data from original metadata
-    type_def_map: HashMap<(String, String), usize>,
+    image_type_def_map: Vec<HashMap<(String, String), usize>>,
     method_spec_map: HashMap<Il2CppMethodSpec, usize>,
 }
 
@@ -66,6 +65,20 @@ impl<'md> ModLoader<'md> {
         code_registration: &'md mut CodeRegistrationBuilder,
         metadata_registration: &'md mut MetadataRegistrationBuilder,
     ) -> Result<Self> {
+        let mut image_type_def_map = Vec::new();
+        for image in &metadata.images {
+            let mut type_def_map = HashMap::with_capacity(image.typeCount as usize);
+            let type_def_range = offset_len(image.typeStart, image.typeCount as i32);
+            for (i, type_def) in metadata.type_definitions[type_def_range].iter().enumerate() {
+                let namespace = get_str(&metadata.string, type_def.namespaceIndex as usize)?;
+                let name = get_str(&metadata.string, type_def.nameIndex as usize)?;
+                type_def_map.insert(
+                    (namespace.to_string(), name.to_string()),
+                    i + image.typeStart as usize,
+                );
+            }
+            image_type_def_map.push(type_def_map);
+        }
         let mut type_def_map = HashMap::with_capacity(metadata.type_definitions.len());
         for (i, type_def) in metadata.type_definitions.iter().enumerate() {
             let namespace = get_str(&metadata.string, type_def.namespaceIndex as usize)?;
@@ -80,7 +93,7 @@ impl<'md> ModLoader<'md> {
             metadata,
             code_registration,
             metadata_registration,
-            type_def_map,
+            image_type_def_map,
             method_spec_map,
         })
     }
@@ -176,9 +189,43 @@ impl<'md> ModLoader<'md> {
     }
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
-        // TODO: proper error handing, fix type_def_map if loading fails
+        let image_name = self.add_str(&mod_data.added_image.name) as i32;
+        self.metadata.images.push(Il2CppImageDefinition {
+            nameIndex: image_name,
+            assemblyIndex: self.metadata.assemblies.len() as i32,
+
+            typeStart: self.metadata.type_definitions.len() as i32,
+            typeCount: mod_data.added_type_defintions.len() as u32,
+
+            exportedTypeStart: -1,
+            exportedTypeCount: 0,
+
+            // TODO: is this needed?
+            entryPointIndex: -1,
+            token: mod_data.added_image.token,
+
+            // TODO: custom attributes
+            customAttributeStart: -1,
+            customAttributeCount: 0,
+        });
+        let mut image_refs = Vec::new();
+        'ii: for image_desc in &mod_data.image_descriptions {
+            for (i, image) in self.metadata.images.iter().enumerate() {
+                let name = self.get_str(image.nameIndex)?;
+                if name == image_desc.name {
+                    image_refs.push(i);
+                    continue 'ii;
+                }
+            }
+
+            bail!("could not resolve image reference: {}", image_desc.name);
+        }
+
+        self.image_type_def_map
+            .push(HashMap::with_capacity(mod_data.added_type_defintions.len()));
+        let type_def_map = self.image_type_def_map.last_mut().unwrap();
         for (i, type_def) in mod_data.added_type_defintions.iter().enumerate() {
-            self.type_def_map.insert(
+            type_def_map.insert(
                 (type_def.namespace.to_string(), type_def.name.to_string()),
                 self.metadata.type_definitions.len() + i,
             );
@@ -188,7 +235,7 @@ impl<'md> ModLoader<'md> {
             .type_def_descriptions
             .iter()
             .map(|desc| {
-                self.type_def_map
+                self.image_type_def_map[image_refs[desc.image]]
                     .get(&(desc.namespace.to_string(), desc.name.to_string()))
                     .cloned()
                     .with_context(|| {
@@ -449,13 +496,16 @@ impl<'md> ModLoader<'md> {
             let ty_def = &self.metadata.type_definitions[decl_ty_idx];
             let return_ty = type_refs[method.return_ty] as i32;
 
+            tracing::debug!("{} methods", ty_def.method_count);
             let method_range = offset_len(ty_def.methodStart, ty_def.method_count as i32);
             for ty_method_idx in method_range {
                 let ty_method = &self.metadata.methods[ty_method_idx];
+                tracing::debug!("{}", self.get_str(ty_method.nameIndex)?);
                 if self.get_str(ty_method.nameIndex)? != method.name
                     || ty_method.returnType != return_ty
                     || ty_method.parameterCount as usize != method.params.len()
                 {
+                    tracing::debug!("returnType/parameterCount/name mismatch");
                     continue;
                 }
                 let params_range =
@@ -469,6 +519,7 @@ impl<'md> ModLoader<'md> {
                     method_refs.push(ty_method_idx);
                     continue 'mm;
                 }
+                tracing::debug!("parameter type mismatch");
             }
             bail!(
                 "unresolved method reference {}.{}::{}",
@@ -629,31 +680,11 @@ impl<'md> ModLoader<'md> {
             public_key_token: mod_data.added_assembly.public_key_token,
         };
         self.metadata.assemblies.push(Il2CppAssemblyDefinition {
-            imageIndex: self.metadata.images.len() as i32,
+            imageIndex: self.metadata.images.len() as i32 - 1,
             token: mod_data.added_assembly.token,
             referencedAssemblyStart: -1,
             referencedAssemblyCount: 0,
             aname,
-        });
-
-        let image_name = self.add_str(&mod_data.added_image.name) as i32;
-        self.metadata.images.push(Il2CppImageDefinition {
-            nameIndex: image_name,
-            assemblyIndex: self.metadata.assemblies.len() as i32 - 1,
-
-            typeStart: ty_defs_start as i32,
-            typeCount: mod_data.added_type_defintions.len() as u32,
-
-            exportedTypeStart: -1,
-            exportedTypeCount: 0,
-
-            // TODO: is this needed?
-            entryPointIndex: -1,
-            token: mod_data.added_image.token,
-
-            // TODO: custom attributes
-            customAttributeStart: -1,
-            customAttributeCount: 0,
         });
 
         let field_offset_table: *const *const i32 = unsafe { lib.symbol("g_FieldOffsetTable")? };
