@@ -540,6 +540,7 @@ impl<'md> ModLoader<'md> {
                     &mut ty_resolver,
                     &ctx,
                 )?;
+                let ctx = ctx.with_method(container_idx);
 
                 if ty_def.name == "Example" && method.name == "Main" && method.parameters.is_empty()
                 {
@@ -577,7 +578,6 @@ impl<'md> ModLoader<'md> {
             }
             let nested_types_start = self.metadata.nested_types.len();
             for &nested_ty in &ty_def.nested_types {
-                tracing::debug!("adding nested type in {}", ty_def.name);
                 self.metadata
                     .nested_types
                     .push(type_def_refs[nested_ty] as i32);
