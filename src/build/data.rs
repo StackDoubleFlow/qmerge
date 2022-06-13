@@ -419,6 +419,11 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 .map(|idx| self.add_type(*idx))
                 .collect::<Result<_>>()?,
             return_ty: self.add_type(method.return_type)?,
+            num_gen_params: if method.generic_container_index != u32::MAX {
+                self.metadata.generic_containers[method.generic_container_index as usize].type_argc
+            } else {
+                0
+            }
         };
         self.methods.push(desc);
         self.method_def_map.insert(idx, desc_idx);

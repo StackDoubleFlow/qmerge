@@ -57,6 +57,7 @@ pub struct MethodDescription {
     pub name: String,
     pub params: Vec<TypeDescriptionIdx>,
     pub return_ty: TypeDescriptionIdx,
+    pub num_gen_params: u32,
 }
 
 #[derive(Encode, Decode, Debug)]
