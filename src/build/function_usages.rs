@@ -81,14 +81,22 @@ impl<'a> ModFunctionUsages<'a> {
         struct_defs: &HashMap<&str, StructDef>,
     ) -> Result<()> {
         let mut external_src = String::new();
+        
         writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
         writeln!(external_src, "#include \"merge/codegen.h\"")?;
         writeln!(external_src)?;
 
+        writeln!(external_src, "extern const size_t g_ExternFuncCount;")?;
+        writeln!(external_src, "extern void* g_MethodFixups[];")?;
+        writeln!(external_src, "extern const func_lut_entry_t g_FuncLut[];")?;
+        
+        writeln!(external_src)?;
+
         let mut added_structs = HashSet::new();
         let mut fd_structs = HashSet::new();
+        let mut added_fns = Vec::new();
 
-        for external in &self.using_external {
+        for (this_idx, external) in self.using_external.iter().enumerate() {
             let orig_idx = self.external_methods[external];
             let idx = data_builder.add_method(orig_idx as u32)?;
             let decl = &self.forward_decls[external];
@@ -132,14 +140,37 @@ impl<'a> ModFunctionUsages<'a> {
                 .collect();
             let params = params.join(", ");
 
-            writeln!(external_src, "{}\n{{", decl)?;
+            writeln!(external_src, "__attribute__((noinline))\n{}\n__attribute__((disable_tail_calls))\n{{", decl)?;
             writeln!(
                 external_src,
-                "    return (({} (*){})(merge_codegen_resolve_method(\"{}\", {})))({});",
-                fn_def.return_ty, fn_def.params, mod_id, idx, params
+                "    return (({} (*){})(g_MethodFixups[{}]))({});",
+                fn_def.return_ty, fn_def.params, this_idx, params
             )?;
             writeln!(external_src, "}}\n")?;
+
+            added_fns.push((String::from(fn_def.name), idx));
         }
+
+        // write the fixups table
+
+        writeln!(external_src, "const size_t g_ExternFuncCount = {};", added_fns.len())?;
+        writeln!(external_src, "void* g_MethodFixups[{}] =", added_fns.len())?;
+        writeln!(external_src, "{{")?;
+        for _ in &added_fns {
+            writeln!(external_src, "    (void*)&merge_prestub,")?;
+        }
+        writeln!(external_src, "}};")?;
+        writeln!(external_src)?;
+
+        // write the lookup table
+        // the lookup table is const because it's going to be copied into a modloader datastructure to be sorted anyway
+        writeln!(external_src, "const func_lut_entry_t g_FuncLut[{}] =", added_fns.len())?;
+        writeln!(external_src, "{{")?;
+        for (fun, idx) in added_fns {
+            writeln!(external_src, "    {{ (void*)&{}, {} }},", fun, idx)?;
+        }
+        writeln!(external_src, "}};")?;
+        writeln!(external_src)?;
 
         let external_path = transformed_path.join("MergeExternal.cpp");
         fs::write(&external_path, external_src)?;

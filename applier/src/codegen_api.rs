@@ -40,6 +40,14 @@ pub extern "C" fn merge_codegen_initialize_method(
     _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32);
 }
 
+pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsafe extern "C" fn() {
+    todo!();
+    // look up mod info/ref index using a sorted list of mod function import helper addresses
+    // look up the method for that reference for that mod
+    // update the mod's fixup table entry to point to the relevant function pointer
+    // return that function pointer
+}
+
 type P = *const ();
 
 #[proxy_codegen_api]
