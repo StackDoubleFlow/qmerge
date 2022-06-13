@@ -16,3 +16,6 @@ anyhow = "1"
 toml = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 dirs = "4"
+
+[patch.crates-io]
+bad64-sys = { git = "https://github.com/StackDoubleFlow/bad64-sys" }
