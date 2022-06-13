@@ -3,8 +3,8 @@ use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistr
 use anyhow::{bail, Context, Result};
 use dlopen::raw::Library;
 use merge_data::{
-    AddedGenericContainer, EncodedMethodIndex, GenericContainerOwner, MergeModData,
-    TypeDescription, TypeDescriptionData,
+    AddedGenericContainer, EncodedMethodIndex, GenericClassInst, GenericContainerOwner,
+    GenericInst, MergeModData, TypeDescription, TypeDescriptionData,
 };
 use std::collections::HashMap;
 use std::ffi::c_void;
@@ -72,16 +72,22 @@ struct TypeResolver<'a> {
     descs: &'a [TypeDescription],
     type_def_refs: &'a [usize],
     refs: Vec<Option<i32>>,
-    generic_class_offset: Option<usize>
+    generic_inst_descs: &'a [GenericInst],
+    generic_insts: Vec<Option<i32>>,
+    generic_class_descs: &'a [GenericClassInst],
+    generic_classes: Vec<Option<*mut Il2CppGenericClass>>,
 }
 
 impl<'a> TypeResolver<'a> {
-    fn new(descs: &'a [TypeDescription], type_def_refs: &'a [usize]) -> Self {
+    fn new(mod_data: &'a MergeModData, type_def_refs: &'a [usize]) -> Self {
         Self {
-            descs,
+            descs: &mod_data.type_descriptions,
             type_def_refs,
-            refs: vec![None; descs.len()],
-            generic_class_offset: None,
+            refs: vec![None; mod_data.type_descriptions.len()],
+            generic_inst_descs: &mod_data.generic_instances,
+            generic_insts: vec![None; mod_data.generic_instances.len()],
+            generic_class_descs: &mod_data.generic_class_insts,
+            generic_classes: vec![None; mod_data.generic_class_insts.len()],
         }
     }
 
@@ -120,10 +126,7 @@ impl<'a> TypeResolver<'a> {
                 }
             }
             TypeDescriptionData::GenericClass(idx) => Il2CppType__bindgen_ty_1 {
-                generic_class: match self.generic_class_offset {
-                    Some(generic_class_offset) => loader.metadata_registration.generic_classes[idx + generic_class_offset],
-                    None => bail!("generic classes have not been resolved yet")
-                },
+                generic_class: self.resolve_generic_class(idx, loader, ctx)?,
             },
         };
         let bitfield = Il2CppType::new_bitfield_1(
@@ -133,20 +136,14 @@ impl<'a> TypeResolver<'a> {
             desc.by_ref as u32,
             false as u32,
         );
-        let ty_idx = match desc.data {
-            // Generic classes aren't resolved yet and contains dummy data, so we
-            // can't search for a matching type
-            TypeDescriptionData::GenericClass(_) => None,
-
-            // TODO: this is probably hella slow, use stable hashset
-            _ => loader
-                .metadata_registration
-                .types
-                .iter()
-                .position(|&ty| unsafe {
-                    (*ty).data.dummy == data.dummy && (*ty)._bitfield_1 == bitfield
-                }),
-        };
+        // TODO: this is probably hella slow, use stable hashset
+        let ty_idx = loader
+            .metadata_registration
+            .types
+            .iter()
+            .position(|&ty| unsafe {
+                (*ty).data.dummy == data.dummy && (*ty)._bitfield_1 == bitfield
+            });
         let ty_idx = match ty_idx {
             Some(idx) => idx,
             None => {
@@ -165,6 +162,105 @@ impl<'a> TypeResolver<'a> {
         };
         self.refs[idx] = Some(ty_idx as i32);
         Ok(ty_idx as i32)
+    }
+
+    fn resolve_generic_class(
+        &mut self,
+        idx: usize,
+        loader: &mut ModLoader,
+        ctx: &TypeResolveContext,
+    ) -> Result<*mut Il2CppGenericClass> {
+        if let Some(ptr) = self.generic_classes[idx] {
+            return Ok(ptr);
+        }
+
+        let gen_class = &self.generic_class_descs[idx];
+
+        let class_inst = self.resolve_generic_inst_ptr(gen_class.context.class, loader, ctx)?;
+        let method_inst = self.resolve_generic_inst_ptr(gen_class.context.method, loader, ctx)?;
+        let ptr = Box::leak(Box::new(Il2CppGenericClass {
+            typeDefinitionIndex: gen_class
+                .class
+                .map(|idx| self.type_def_refs[idx] as i32)
+                .unwrap_or(-1),
+            context: Il2CppGenericContext {
+                class_inst,
+                method_inst,
+            },
+            cached_class: ptr::null_mut(),
+        }));
+        loader.metadata_registration.generic_classes.push(ptr);
+
+        Ok(ptr)
+    }
+
+    fn resolve_generic_inst(
+        &mut self,
+        idx: Option<usize>,
+        loader: &mut ModLoader,
+        ctx: &TypeResolveContext,
+    ) -> Result<i32> {
+        let idx = match idx {
+            Some(idx) => idx,
+            None => return Ok(-1),
+        };
+        if let Some(idx) = self.generic_insts[idx] {
+            return Ok(idx);
+        }
+        let gen_inst = &self.generic_inst_descs[idx];
+
+        let types = gen_inst
+            .types
+            .iter()
+            .map(|&idx| {
+                self.resolve(idx, loader, ctx)
+                    .map(|idx| loader.metadata_registration.types[idx as usize])
+            })
+            .collect::<Result<Box<_>>>()?;
+        let base_idx = loader
+            .metadata_registration
+            .generic_insts
+            .iter()
+            .position(|&base_inst| {
+                let base_types = unsafe {
+                    let base_inst = &*base_inst;
+                    slice::from_raw_parts(base_inst.type_argv, base_inst.type_argc as usize)
+                };
+                &*types == base_types
+            });
+
+        let resolved_idx = match base_idx {
+            Some(idx) => idx,
+            None => {
+                let idx = loader.metadata_registration.generic_insts.len();
+                loader
+                    .metadata_registration
+                    .generic_insts
+                    .push(Box::leak(Box::new(Il2CppGenericInst {
+                        type_argc: gen_inst.types.len() as u32,
+                        type_argv: Box::leak(types).as_mut_ptr(),
+                    })));
+                idx
+            }
+        };
+
+        self.generic_insts[idx] = Some(resolved_idx as i32);
+        Ok(resolved_idx as i32)
+    }
+
+    fn resolve_generic_inst_ptr(
+        &mut self,
+        idx: Option<usize>,
+        loader: &mut ModLoader,
+        ctx: &TypeResolveContext,
+    ) -> Result<*const Il2CppGenericInst> {
+        let idx = self.resolve_generic_inst(idx, loader, ctx)?;
+        let ptr = if idx == -1 {
+            ptr::null()
+        } else {
+            loader.metadata_registration.generic_insts[idx as usize]
+        };
+        Ok(ptr)
     }
 }
 
@@ -381,67 +477,7 @@ impl<'md> ModLoader<'md> {
             })
             .collect::<Result<Vec<usize>>>()?;
 
-        let mut ty_resolver = TypeResolver::new(&mod_data.type_descriptions, &type_def_refs);
-
-        let mut gen_insts = Vec::with_capacity(mod_data.generic_instances.len());
-        for gen_inst in &mod_data.generic_instances {
-            let types = gen_inst
-                .types
-                .iter()
-                .map(|&idx| {
-                    ty_resolver
-                        .resolve(idx, self, &Default::default())
-                        .map(|idx| self.metadata_registration.types[idx as usize])
-                })
-                .collect::<Result<Box<_>>>()?;
-            let base_idx = self
-                .metadata_registration
-                .generic_insts
-                .iter()
-                .position(|&base_inst| {
-                    let base_types = unsafe {
-                        let base_inst = &*base_inst;
-                        slice::from_raw_parts(base_inst.type_argv, base_inst.type_argc as usize)
-                    };
-                    &*types == base_types
-                });
-
-            match base_idx {
-                Some(idx) => gen_insts.push(idx),
-                None => {
-                    let idx = self.metadata_registration.generic_insts.len();
-                    self.metadata_registration
-                        .generic_insts
-                        .push(Box::leak(Box::new(Il2CppGenericInst {
-                            type_argc: gen_inst.types.len() as u32,
-                            type_argv: Box::leak(types).as_mut_ptr(),
-                        })));
-                    gen_insts.push(idx);
-                }
-            }
-        }
-
-        let gen_class_offset = self.metadata_registration.generic_classes.len();
-        for gen_class in &mod_data.generic_class_insts {
-            self.metadata_registration
-                .generic_classes
-                .push(Box::leak(Box::new(Il2CppGenericClass {
-                    typeDefinitionIndex: gen_class
-                        .class
-                        .map(|idx| type_def_refs[idx] as i32)
-                        .unwrap_or(-1),
-                    context: Il2CppGenericContext {
-                        class_inst: gen_class.context.class.map_or(ptr::null(), |idx| {
-                            self.metadata_registration.generic_insts[gen_insts[idx]]
-                        }),
-                        method_inst: gen_class.context.method.map_or(ptr::null(), |idx| {
-                            self.metadata_registration.generic_insts[gen_insts[idx]]
-                        }),
-                    },
-                    cached_class: ptr::null_mut(),
-                })))
-        }
-        ty_resolver.generic_class_offset = Some(gen_class_offset);
+        let mut ty_resolver = TypeResolver::new(mod_data, &type_def_refs);
 
         let code_gen_module: *const Il2CppCodeGenModule =
             unsafe { lib.symbol(&format!("g_{}CodeGenModule", id))? };
@@ -451,6 +487,7 @@ impl<'md> ModLoader<'md> {
 
         let mut load_fn = None;
 
+        tracing::debug!("Adding mod type defs");
         // Fill in everything that doesn't requre method references now
         let ty_defs_start = self.metadata.type_definitions.len();
         for ty_def in &mod_data.added_type_defintions {
@@ -590,6 +627,7 @@ impl<'md> ModLoader<'md> {
             })
         }
 
+        tracing::debug!("Resolving methods");
         let mut method_refs = Vec::with_capacity(mod_data.method_descriptions.len());
         'mm: for method in &mod_data.method_descriptions {
             let decl_ty_idx = type_def_refs[method.defining_type];
@@ -649,19 +687,28 @@ impl<'md> ModLoader<'md> {
             );
         }
 
+        tracing::debug!("Resolving generic methods");
         let gen_method_offset = self.metadata_registration.method_specs.len();
         let mut gen_methods = Vec::with_capacity(mod_data.generic_method_insts.len());
         for gen_method in &mod_data.generic_method_insts {
+            let method = &self.metadata.methods[method_refs[gen_method.method]];
+            let ctx = TypeResolveContext::new(
+                self.metadata.type_definitions[method.declaringType as usize].genericContainerIndex,
+            )
+            .with_method(method.genericContainerIndex);
+
             let method_spec = Il2CppMethodSpec {
                 methodDefinitionIndex: method_refs[gen_method.method] as i32,
-                classIndexIndex: gen_method
-                    .context
-                    .class
-                    .map_or(-1, |idx| gen_insts[idx] as i32),
-                methodIndexIndex: gen_method
-                    .context
-                    .method
-                    .map_or(-1, |idx| gen_insts[idx] as i32),
+                classIndexIndex: ty_resolver.resolve_generic_inst(
+                    gen_method.context.class,
+                    self,
+                    &ctx,
+                )?,
+                methodIndexIndex: ty_resolver.resolve_generic_inst(
+                    gen_method.context.method,
+                    self,
+                    &ctx,
+                )?,
             };
             if let Some(&idx) = self.method_spec_map.get(&method_spec) {
                 gen_methods.push(idx);
@@ -717,6 +764,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
+        tracing::debug!("Resolving rest of added type defs");
         // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
         for (i, ty_def) in mod_data.added_type_defintions.iter().enumerate() {
             let i = i + ty_defs_start;
@@ -800,7 +848,7 @@ impl<'md> ModLoader<'md> {
             self.metadata_registration.type_definition_sizes.push(sizes);
         }
 
-        tracing::debug!("here");
+        tracing::debug!("Resolving metadata usages");
         let metadata_usages: *const *mut *mut c_void = unsafe { lib.symbol("g_MetadataUsages")? };
         let metadata_usage_offset = self.metadata_registration.metadata_usages.len();
         for i in 0..mod_data.code_table_sizes.metadata_usages {
@@ -833,7 +881,6 @@ impl<'md> ModLoader<'md> {
                     })
             }
         }
-        tracing::debug!("here2");
 
         MODS.lock().unwrap().insert(
             id.to_string(),
