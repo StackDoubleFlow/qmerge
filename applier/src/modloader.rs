@@ -190,7 +190,9 @@ impl<'a> TypeResolver<'a> {
             .find(|&base_class| {
                 let base_class = unsafe { &*base_class };
                 let context = &base_class.context;
-                base_class.typeDefinitionIndex == class && context.class_inst == class_inst && context.method_inst == method_inst
+                base_class.typeDefinitionIndex == class
+                    && context.class_inst == class_inst
+                    && context.method_inst == method_inst
             });
 
         let resolved_ptr = match base_ptr {
@@ -772,8 +774,7 @@ impl<'md> ModLoader<'md> {
             }
             self.metadata_registration.generic_method_table.push(
                 Il2CppGenericMethodFunctionsDefinitions {
-                    genericMethodIndex: (gen_method_funcs.generic_method + gen_method_offset)
-                        as i32,
+                    genericMethodIndex: idx as i32,
                     indices: Il2CppGenericMethodIndices {
                         methodIndex: (gen_method_funcs.method_idx + gen_method_ptrs_offset) as i32,
                         invokerIndex: (gen_method_funcs.invoker_idx + invokers_offset) as i32,
