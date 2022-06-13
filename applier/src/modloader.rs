@@ -9,10 +9,11 @@ use merge_data::{
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::lazy::{SyncLazy, SyncOnceCell};
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::{ptr, slice, str};
 
-pub static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
+pub static MODS: SyncLazy<Mutex<HashMap<String, Box<Mod>>>> = SyncLazy::new(Default::default);
+pub(crate) static MOD_IMPORT_LUT: SyncLazy<RwLock<ImportLut>> = SyncLazy::new(|| RwLock::new(Default::default()));
 pub static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
 pub static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
     SyncOnceCell::new();
@@ -289,7 +290,40 @@ pub struct Mod {
     pub lib: Library,
     pub refs: ModRefs,
     pub load_fn: Option<unsafe extern "C" fn()>,
+
+    pub extern_len: usize,
+    pub fixups: *mut FixupEntry,
 }
+
+unsafe impl Sync for Mod {}
+unsafe impl Send for Mod {}
+
+#[repr(transparent)]
+pub struct FixupEntry {
+    pub value: unsafe extern "C" fn(),
+}
+
+#[repr(C)]
+struct FuncLutEntry {
+    pub fnptr: *const (),
+    pub idx: usize,
+}
+
+#[derive(Default)]
+pub(crate) struct ImportLut {
+    pub ptrs: Vec<usize>,
+    pub data: Vec<ImportLutEntry>,
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct ImportLutEntry {
+    pub mod_info: *const Mod,
+    pub fixup_index: usize,
+    pub ref_index: usize,
+}
+
+unsafe impl Sync for ImportLutEntry {}
+unsafe impl Send for ImportLutEntry {}
 
 pub struct ModRefs {
     pub type_def_refs: Vec<usize>,
@@ -903,8 +937,12 @@ impl<'md> ModLoader<'md> {
             }
         }
 
-        MODS.lock().unwrap().insert(
-            id.to_string(),
+        tracing::debug!("Loading import tables");
+        let fixup_table: *const *mut FixupEntry = unsafe { lib.symbol("g_MethodFixups")? };
+        let fixup_count: *const usize = unsafe { lib.symbol("g_ExternFuncCount")? };
+        let func_lut_table: *const *mut FuncLutEntry = unsafe { lib.symbol("g_FuncLut")? };
+
+        let new_mod = Box::new(
             Mod {
                 lib,
                 refs: ModRefs {
@@ -913,7 +951,33 @@ impl<'md> ModLoader<'md> {
                     usage_list_offset,
                 },
                 load_fn,
+
+                extern_len: unsafe { *fixup_count },
+                fixups: unsafe { *fixup_table },
             },
+        );
+
+        let mod_ptr = Box::into_raw(new_mod);
+
+        {
+            let mut lut = MOD_IMPORT_LUT.write().unwrap();
+            for i in 0..unsafe { (*mod_ptr).extern_len } {
+                let orig_entry = unsafe { &*func_lut_table.add(i).read() };
+                let ptr_val = orig_entry.fnptr as usize;
+                let res = lut.ptrs.as_slice().binary_search(&ptr_val);
+                let insert_idx = res.expect_err("pointer to be inserted already exists");
+                lut.ptrs.insert(insert_idx, ptr_val);
+                lut.data.insert(insert_idx, ImportLutEntry {
+                    mod_info: mod_ptr,
+                    fixup_index: i,
+                    ref_index: orig_entry.idx
+                });
+            }
+        }
+
+        MODS.lock().unwrap().insert(
+            id.to_string(),
+            unsafe { Box::from_raw(mod_ptr) },
         );
 
         Ok(())
