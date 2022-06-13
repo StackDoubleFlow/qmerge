@@ -27,15 +27,22 @@ fn main() {
         }
         Err(e) => panic!("{:?}", e),
     };
-    let ndk_sysroot_include = ndk_path.join(format!(
-        "toolchains/llvm/prebuilt/{}/sysroot/usr/include",
-        NDK_HOST_TAG
-    ));
+
+    let sysroot_path = ndk_path.join(format!("toolchains/llvm/prebuilt/{}/sysroot", NDK_HOST_TAG));
+    let ndk_sysroot_include = sysroot_path.join("usr/include");
+
+    // TODO
+    let target = "aarch64-linux-android";
+    let ndk_sysroot_target_include = sysroot_path.join(format!("usr/include/{}", target));
 
     let libil2cpp_path = editors_path.join("2019.4.28f1/Editor/Data/il2cpp/libil2cpp");
     let bindings = bindgen::Builder::default()
         .clang_arg(format!("-I{}", libil2cpp_path.to_str().unwrap()))
         .clang_arg(format!("-isystem{}", ndk_sysroot_include.to_str().unwrap()))
+        .clang_arg(format!(
+            "-isystem{}",
+            ndk_sysroot_target_include.to_str().unwrap()
+        ))
         .header(
             libil2cpp_path
                 .join("il2cpp-class-internals.h")
