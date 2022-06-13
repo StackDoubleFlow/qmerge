@@ -175,23 +175,44 @@ impl<'a> TypeResolver<'a> {
         }
 
         let gen_class = &self.generic_class_descs[idx];
+        let class = gen_class
+            .class
+            .map(|idx| self.type_def_refs[idx] as i32)
+            .unwrap_or(-1);
 
         let class_inst = self.resolve_generic_inst_ptr(gen_class.context.class, loader, ctx)?;
         let method_inst = self.resolve_generic_inst_ptr(gen_class.context.method, loader, ctx)?;
-        let ptr = Box::leak(Box::new(Il2CppGenericClass {
-            typeDefinitionIndex: gen_class
-                .class
-                .map(|idx| self.type_def_refs[idx] as i32)
-                .unwrap_or(-1),
-            context: Il2CppGenericContext {
-                class_inst,
-                method_inst,
-            },
-            cached_class: ptr::null_mut(),
-        }));
-        loader.metadata_registration.generic_classes.push(ptr);
+        let base_ptr = loader
+            .metadata_registration
+            .generic_classes
+            .iter()
+            .copied()
+            .find(|&base_class| {
+                let base_class = unsafe { &*base_class };
+                let context = &base_class.context;
+                base_class.typeDefinitionIndex == class && context.class_inst == class_inst && context.method_inst == method_inst
+            });
 
-        Ok(ptr)
+        let resolved_ptr = match base_ptr {
+            Some(idx) => idx,
+            None => {
+                let ptr = Box::leak(Box::new(Il2CppGenericClass {
+                    typeDefinitionIndex: gen_class
+                        .class
+                        .map(|idx| self.type_def_refs[idx] as i32)
+                        .unwrap_or(-1),
+                    context: Il2CppGenericContext {
+                        class_inst,
+                        method_inst,
+                    },
+                    cached_class: ptr::null_mut(),
+                }));
+                loader.metadata_registration.generic_classes.push(ptr);
+                ptr
+            }
+        };
+
+        Ok(resolved_ptr)
     }
 
     fn resolve_generic_inst(
@@ -520,7 +541,7 @@ impl<'md> ModLoader<'md> {
                     &ctx,
                 )?;
 
-                if ty_def.name == "Plugin" && method.name == "Load" && method.parameters.is_empty()
+                if ty_def.name == "Example" && method.name == "Main" && method.parameters.is_empty()
                 {
                     let rid = 0x00FFFFFF & method.token;
                     unsafe {
