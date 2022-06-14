@@ -48,7 +48,7 @@ pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsaf
         let lut = MOD_IMPORT_LUT.read().unwrap();
         let index = match lut.ptrs.as_slice().binary_search(&addr) {
             Ok(s) => s,
-            Err(s) => s,
+            Err(s) => s - 1,
         };
 
         lut.data[index]
