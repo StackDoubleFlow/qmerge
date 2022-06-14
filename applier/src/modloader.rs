@@ -6,6 +6,7 @@ use merge_data::{
     AddedGenericContainer, EncodedMethodIndex, GenericClassInst, GenericContainerOwner,
     GenericInst, MergeModData, TypeDescription, TypeDescriptionData,
 };
+use tracing::debug;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::lazy::{SyncLazy, SyncOnceCell};
@@ -317,7 +318,6 @@ pub(crate) struct ImportLut {
 }
 
 #[derive(Copy, Clone)]
-#[derive(Debug)]
 pub(crate) struct ImportLutEntry {
     pub mod_info: *const Mod,
     pub fixup_index: usize,
@@ -544,7 +544,7 @@ impl<'md> ModLoader<'md> {
 
         let mut load_fn = None;
 
-        tracing::debug!("Adding mod type defs");
+        debug!("Adding mod type defs");
         // Fill in everything that doesn't requre method references now
         let ty_defs_start = self.metadata.type_definitions.len();
         for ty_def in &mod_data.added_type_defintions {
@@ -684,7 +684,7 @@ impl<'md> ModLoader<'md> {
             })
         }
 
-        tracing::debug!("Resolving methods");
+        debug!("Resolving methods");
         let mut method_refs = Vec::with_capacity(mod_data.method_descriptions.len());
         'mm: for method in &mod_data.method_descriptions {
             let decl_ty_idx = type_def_refs[method.defining_type];
@@ -744,7 +744,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
-        tracing::debug!("Resolving generic methods");
+        debug!("Resolving generic methods");
         let gen_method_offset = self.metadata_registration.method_specs.len();
         let mut gen_methods = Vec::with_capacity(mod_data.generic_method_insts.len());
         for gen_method in &mod_data.generic_method_insts {
@@ -821,7 +821,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
-        tracing::debug!("Resolving rest of added type defs");
+        debug!("Resolving rest of added type defs");
         // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
         for (i, ty_def) in mod_data.added_type_defintions.iter().enumerate() {
             let i = i + ty_defs_start;
@@ -905,7 +905,7 @@ impl<'md> ModLoader<'md> {
             self.metadata_registration.type_definition_sizes.push(sizes);
         }
 
-        tracing::debug!("Resolving metadata usages");
+        debug!("Resolving metadata usages");
         let metadata_usages: *const *mut *mut c_void = unsafe { lib.symbol("g_MetadataUsages")? };
         let metadata_usage_offset = self.metadata_registration.metadata_usages.len();
         for i in 0..mod_data.code_table_sizes.metadata_usages {
@@ -939,7 +939,7 @@ impl<'md> ModLoader<'md> {
             }
         }
 
-        tracing::debug!("Loading import tables");
+        debug!("Loading import tables");
         let fixup_table: *mut FixupEntry = unsafe { lib.symbol("g_MethodFixups")? };
         let fixup_count: *const usize = unsafe { lib.symbol("g_ExternFuncCount")? };
         let func_lut_table: *const FuncLutEntry = unsafe { lib.symbol("g_FuncLut")? };
@@ -965,7 +965,6 @@ impl<'md> ModLoader<'md> {
             let mut lut = MOD_IMPORT_LUT.write().unwrap();
             for i in 0..unsafe { (*mod_ptr).extern_len } {
                 let orig_entry = unsafe { func_lut_table.add(i).read() };
-                tracing::debug!(i, entry = ?orig_entry);
                 let ptr_val = orig_entry.fnptr as usize;
                 let res = lut.ptrs.as_slice().binary_search(&ptr_val);
                 let insert_idx = res.expect_err("pointer to be inserted already exists");
