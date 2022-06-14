@@ -54,6 +54,8 @@ pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsaf
         lut.data[index]
     };
 
+    tracing::debug!(?info);
+
     // look up the method for that reference for that mod
     let mod_info = unsafe { &*info.mod_info };
     let real_idx = mod_info.refs.method_refs[info.ref_index];

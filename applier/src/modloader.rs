@@ -304,6 +304,7 @@ pub struct FixupEntry {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 struct FuncLutEntry {
     pub fnptr: *const (),
     pub idx: usize,
@@ -316,6 +317,7 @@ pub(crate) struct ImportLut {
 }
 
 #[derive(Copy, Clone)]
+#[derive(Debug)]
 pub(crate) struct ImportLutEntry {
     pub mod_info: *const Mod,
     pub fixup_index: usize,
@@ -963,6 +965,7 @@ impl<'md> ModLoader<'md> {
             let mut lut = MOD_IMPORT_LUT.write().unwrap();
             for i in 0..unsafe { (*mod_ptr).extern_len } {
                 let orig_entry = unsafe { (*func_lut_table).add(i).read() };
+                tracing::debug!(i, entry = ?orig_entry);
                 let ptr_val = orig_entry.fnptr as usize;
                 let res = lut.ptrs.as_slice().binary_search(&ptr_val);
                 let insert_idx = res.expect_err("pointer to be inserted already exists");
