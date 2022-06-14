@@ -3,7 +3,6 @@
 #![feature(naked_functions)]
 #![feature(asm_sym)]
 
-
 mod asm;
 mod codegen_api;
 pub mod il2cpp_types;

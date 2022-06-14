@@ -6,12 +6,12 @@ use merge_data::{
     AddedGenericContainer, EncodedMethodIndex, GenericClassInst, GenericContainerOwner,
     GenericInst, MergeModData, TypeDescription, TypeDescriptionData,
 };
-use tracing::debug;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::lazy::{SyncLazy, SyncOnceCell};
 use std::sync::Mutex;
 use std::{ptr, slice, str};
+use tracing::debug;
 
 pub static MODS: SyncLazy<Mutex<HashMap<String, Box<Mod>>>> = SyncLazy::new(Default::default);
 pub(crate) static MOD_IMPORT_LUT: SyncOnceCell<ImportLut> = SyncOnceCell::new();
@@ -192,7 +192,9 @@ impl<'a> TypeResolver<'a> {
             .find(|&base_class| {
                 let base_class = unsafe { &*base_class };
                 let context = &base_class.context;
-                base_class.typeDefinitionIndex == class && context.class_inst == class_inst && context.method_inst == method_inst
+                base_class.typeDefinitionIndex == class
+                    && context.class_inst == class_inst
+                    && context.method_inst == method_inst
             });
 
         let resolved_ptr = match base_ptr {
@@ -950,20 +952,18 @@ impl<'md> ModLoader<'md> {
         let fixup_count: *const usize = unsafe { lib.symbol("g_ExternFuncCount")? };
         let func_lut_table: *const FuncLutEntry = unsafe { lib.symbol("g_FuncLut")? };
 
-        let new_mod = Box::new(
-            Mod {
-                lib,
-                refs: ModRefs {
-                    type_def_refs,
-                    method_refs,
-                    usage_list_offset,
-                },
-                load_fn,
-
-                extern_len: unsafe { *fixup_count },
-                fixups: fixup_table,
+        let new_mod = Box::new(Mod {
+            lib,
+            refs: ModRefs {
+                type_def_refs,
+                method_refs,
+                usage_list_offset,
             },
-        );
+            load_fn,
+
+            extern_len: unsafe { *fixup_count },
+            fixups: fixup_table,
+        });
 
         let mod_ptr = Box::into_raw(new_mod);
 
@@ -975,18 +975,20 @@ impl<'md> ModLoader<'md> {
                 let res = lut.ptrs.as_slice().binary_search(&ptr_val);
                 let insert_idx = res.expect_err("pointer to be inserted already exists");
                 lut.ptrs.insert(insert_idx, ptr_val);
-                lut.data.insert(insert_idx, ImportLutEntry {
-                    mod_info: mod_ptr,
-                    fixup_index: i,
-                    ref_index: orig_entry.idx
-                });
+                lut.data.insert(
+                    insert_idx,
+                    ImportLutEntry {
+                        mod_info: mod_ptr,
+                        fixup_index: i,
+                        ref_index: orig_entry.idx,
+                    },
+                );
             }
         }
 
-        MODS.lock().unwrap().insert(
-            id.to_string(),
-            unsafe { Box::from_raw(mod_ptr) },
-        );
+        MODS.lock()
+            .unwrap()
+            .insert(id.to_string(), unsafe { Box::from_raw(mod_ptr) });
 
         Ok(())
     }
