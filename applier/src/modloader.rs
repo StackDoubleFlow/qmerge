@@ -10,11 +10,11 @@ use tracing::debug;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::lazy::{SyncLazy, SyncOnceCell};
-use std::sync::{Mutex, RwLock};
+use std::sync::Mutex;
 use std::{ptr, slice, str};
 
 pub static MODS: SyncLazy<Mutex<HashMap<String, Box<Mod>>>> = SyncLazy::new(Default::default);
-pub(crate) static MOD_IMPORT_LUT: SyncLazy<RwLock<ImportLut>> = SyncLazy::new(|| RwLock::new(Default::default()));
+pub(crate) static MOD_IMPORT_LUT: SyncOnceCell<ImportLut> = SyncOnceCell::new();
 pub static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
 pub static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
     SyncOnceCell::new();
@@ -311,13 +311,13 @@ struct FuncLutEntry {
     pub idx: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct ImportLut {
     pub ptrs: Vec<usize>,
     pub data: Vec<ImportLutEntry>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct ImportLutEntry {
     pub mod_info: *const Mod,
     pub fixup_index: usize,
@@ -339,6 +339,7 @@ pub struct ModLoader<'md> {
     metadata_registration: &'md mut MetadataRegistrationBuilder,
     image_type_def_map: Vec<HashMap<(String, String), usize>>,
     method_spec_map: HashMap<Il2CppMethodSpec, usize>,
+    import_lut: ImportLut,
 }
 
 impl<'md> ModLoader<'md> {
@@ -377,7 +378,12 @@ impl<'md> ModLoader<'md> {
             metadata_registration,
             image_type_def_map,
             method_spec_map,
+            import_lut: Default::default(),
         })
+    }
+
+    pub fn finish(self) {
+        MOD_IMPORT_LUT.set(self.import_lut).unwrap();
     }
 
     fn get_str(&self, offset: i32) -> Result<&str> {
@@ -962,7 +968,7 @@ impl<'md> ModLoader<'md> {
         let mod_ptr = Box::into_raw(new_mod);
 
         {
-            let mut lut = MOD_IMPORT_LUT.write().unwrap();
+            let lut = &mut self.import_lut;
             for i in 0..unsafe { (*mod_ptr).extern_len } {
                 let orig_entry = unsafe { func_lut_table.add(i).read() };
                 let ptr_val = orig_entry.fnptr as usize;

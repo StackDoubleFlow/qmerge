@@ -110,6 +110,7 @@ fn load_mods(
         )?;
     }
 
+    modloader.finish();
     Ok(())
 }
 
