@@ -11,8 +11,10 @@ use std::ffi::c_void;
 use std::lazy::{SyncLazy, SyncOnceCell};
 use std::sync::Mutex;
 use std::{ptr, slice, str};
+use tracing::debug;
 
-pub static MODS: SyncLazy<Mutex<HashMap<String, Mod>>> = SyncLazy::new(Default::default);
+pub static MODS: SyncLazy<Mutex<HashMap<String, Box<Mod>>>> = SyncLazy::new(Default::default);
+pub(crate) static MOD_IMPORT_LUT: SyncOnceCell<ImportLut> = SyncOnceCell::new();
 pub static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
 pub static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
     SyncOnceCell::new();
@@ -291,7 +293,41 @@ pub struct Mod {
     pub lib: Library,
     pub refs: ModRefs,
     pub load_fn: Option<unsafe extern "C" fn()>,
+
+    pub extern_len: usize,
+    pub fixups: *mut FixupEntry,
 }
+
+unsafe impl Sync for Mod {}
+unsafe impl Send for Mod {}
+
+#[repr(transparent)]
+pub struct FixupEntry {
+    pub value: unsafe extern "C" fn(),
+}
+
+#[repr(C)]
+#[derive(Debug)]
+struct FuncLutEntry {
+    pub fnptr: *const (),
+    pub idx: usize,
+}
+
+#[derive(Default, Debug)]
+pub(crate) struct ImportLut {
+    pub ptrs: Vec<usize>,
+    pub data: Vec<ImportLutEntry>,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct ImportLutEntry {
+    pub mod_info: *const Mod,
+    pub fixup_index: usize,
+    pub ref_index: usize,
+}
+
+unsafe impl Sync for ImportLutEntry {}
+unsafe impl Send for ImportLutEntry {}
 
 pub struct ModRefs {
     pub type_def_refs: Vec<usize>,
@@ -305,6 +341,7 @@ pub struct ModLoader<'md> {
     metadata_registration: &'md mut MetadataRegistrationBuilder,
     image_type_def_map: Vec<HashMap<(String, String), usize>>,
     method_spec_map: HashMap<Il2CppMethodSpec, usize>,
+    import_lut: ImportLut,
 }
 
 impl<'md> ModLoader<'md> {
@@ -343,7 +380,12 @@ impl<'md> ModLoader<'md> {
             metadata_registration,
             image_type_def_map,
             method_spec_map,
+            import_lut: Default::default(),
         })
+    }
+
+    pub fn finish(self) {
+        MOD_IMPORT_LUT.set(self.import_lut).unwrap();
     }
 
     fn get_str(&self, offset: i32) -> Result<&str> {
@@ -510,7 +552,7 @@ impl<'md> ModLoader<'md> {
 
         let mut load_fn = None;
 
-        tracing::debug!("Adding mod type defs");
+        debug!("Adding mod type defs");
         // Fill in everything that doesn't requre method references now
         let ty_defs_start = self.metadata.type_definitions.len();
         for ty_def in &mod_data.added_type_defintions {
@@ -650,7 +692,7 @@ impl<'md> ModLoader<'md> {
             })
         }
 
-        tracing::debug!("Resolving methods");
+        debug!("Resolving methods");
         let mut method_refs = Vec::with_capacity(mod_data.method_descriptions.len());
         'mm: for method in &mod_data.method_descriptions {
             let decl_ty_idx = type_def_refs[method.defining_type];
@@ -710,7 +752,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
-        tracing::debug!("Resolving generic methods");
+        debug!("Resolving generic methods");
         let gen_method_offset = self.metadata_registration.method_specs.len();
         let mut gen_methods = Vec::with_capacity(mod_data.generic_method_insts.len());
         for gen_method in &mod_data.generic_method_insts {
@@ -786,7 +828,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
-        tracing::debug!("Resolving rest of added type defs");
+        debug!("Resolving rest of added type defs");
         // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
         for (i, ty_def) in mod_data.added_type_defintions.iter().enumerate() {
             let i = i + ty_defs_start;
@@ -870,7 +912,7 @@ impl<'md> ModLoader<'md> {
             self.metadata_registration.type_definition_sizes.push(sizes);
         }
 
-        tracing::debug!("Resolving metadata usages");
+        debug!("Resolving metadata usages");
         let metadata_usages: *const *mut *mut c_void = unsafe { lib.symbol("g_MetadataUsages")? };
         let metadata_usage_offset = self.metadata_registration.metadata_usages.len();
         for i in 0..mod_data.code_table_sizes.metadata_usages {
@@ -904,18 +946,48 @@ impl<'md> ModLoader<'md> {
             }
         }
 
-        MODS.lock().unwrap().insert(
-            id.to_string(),
-            Mod {
-                lib,
-                refs: ModRefs {
-                    type_def_refs,
-                    method_refs,
-                    usage_list_offset,
-                },
-                load_fn,
+        debug!("Loading import tables");
+        let fixup_table: *mut FixupEntry = unsafe { lib.symbol("g_MethodFixups")? };
+        let fixup_count: *const usize = unsafe { lib.symbol("g_ExternFuncCount")? };
+        let func_lut_table: *const FuncLutEntry = unsafe { lib.symbol("g_FuncLut")? };
+
+        let new_mod = Box::new(Mod {
+            lib,
+            refs: ModRefs {
+                type_def_refs,
+                method_refs,
+                usage_list_offset,
             },
-        );
+            load_fn,
+
+            extern_len: unsafe { *fixup_count },
+            fixups: fixup_table,
+        });
+
+        let mod_ptr = Box::into_raw(new_mod);
+
+        {
+            let lut = &mut self.import_lut;
+            for i in 0..unsafe { (*mod_ptr).extern_len } {
+                let orig_entry = unsafe { func_lut_table.add(i).read() };
+                let ptr_val = orig_entry.fnptr as usize;
+                let res = lut.ptrs.as_slice().binary_search(&ptr_val);
+                let insert_idx = res.expect_err("pointer to be inserted already exists");
+                lut.ptrs.insert(insert_idx, ptr_val);
+                lut.data.insert(
+                    insert_idx,
+                    ImportLutEntry {
+                        mod_info: mod_ptr,
+                        fixup_index: i,
+                        ref_index: orig_entry.idx,
+                    },
+                );
+            }
+        }
+
+        MODS.lock()
+            .unwrap()
+            .insert(id.to_string(), unsafe { Box::from_raw(mod_ptr) });
 
         Ok(())
     }

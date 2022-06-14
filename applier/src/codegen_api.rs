@@ -1,5 +1,5 @@
 use crate::il2cpp_types::MethodInfo;
-use crate::modloader::MODS;
+use crate::modloader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
 use applier_proc_macro::proxy_codegen_api;
 use std::ffi::CStr;
@@ -38,6 +38,34 @@ pub extern "C" fn merge_codegen_initialize_method(
     let usage_offset = MODS.lock().unwrap()[mod_id].refs.usage_list_offset;
 
     _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32);
+}
+
+pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsafe extern "C" fn() {
+    let addr = fn_addr as usize;
+
+    // look up mod info/ref index using a sorted list of mod function import helper addresses
+    let info = {
+        let lut = MOD_IMPORT_LUT.get().unwrap();
+        let index = match lut.ptrs.as_slice().binary_search(&addr) {
+            Ok(s) => s,
+            Err(s) => s - 1,
+        };
+
+        lut.data[index]
+    };
+
+    // look up the method for that reference for that mod
+    let mod_info = unsafe { &*info.mod_info };
+    let real_idx = mod_info.refs.method_refs[info.ref_index];
+    let method_info = get_method_info_from_idx(real_idx);
+
+    // update the mod's fixup table entry to point to the relevant function pointer
+    let fixup_idx = info.fixup_index;
+    let ptr = method_info.methodPointer.unwrap();
+    unsafe { (*mod_info.fixups.add(fixup_idx)).value = ptr };
+
+    // return that function pointer
+    ptr
 }
 
 type P = *const ();

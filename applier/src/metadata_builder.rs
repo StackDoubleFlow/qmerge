@@ -1,4 +1,5 @@
 use crate::il2cpp_types::*;
+use crate::modloader::{CODE_REGISTRATION, METADATA_REGISTRATION};
 use anyhow::{ensure, Result};
 use std::mem::size_of;
 use std::slice;
@@ -212,6 +213,7 @@ impl CodeRegistrationBuilder {
         unsafe {
             (*self.raw) = static_ref;
         }
+        CODE_REGISTRATION.set(static_ref).unwrap();
         static_ref
     }
 }
@@ -293,6 +295,7 @@ impl MetadataRegistrationBuilder {
         unsafe {
             (*self.raw) = static_ref;
         }
+        METADATA_REGISTRATION.set(static_ref).unwrap();
         static_ref
     }
 }

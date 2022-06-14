@@ -1,6 +1,9 @@
 #![feature(once_cell, backtrace)]
 #![feature(native_link_modifiers_bundle)]
+#![feature(naked_functions)]
+#![feature(asm_sym)]
 
+mod asm;
 mod codegen_api;
 pub mod il2cpp_types;
 mod metadata_builder;
@@ -106,6 +109,7 @@ fn load_mods(
         )?;
     }
 
+    modloader.finish();
     Ok(())
 }
 
