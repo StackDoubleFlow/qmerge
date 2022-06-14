@@ -940,9 +940,9 @@ impl<'md> ModLoader<'md> {
         }
 
         tracing::debug!("Loading import tables");
-        let fixup_table: *const *mut FixupEntry = unsafe { lib.symbol("g_MethodFixups")? };
+        let fixup_table: *mut FixupEntry = unsafe { lib.symbol("g_MethodFixups")? };
         let fixup_count: *const usize = unsafe { lib.symbol("g_ExternFuncCount")? };
-        let func_lut_table: *const *const FuncLutEntry = unsafe { lib.symbol("g_FuncLut")? };
+        let func_lut_table: *const FuncLutEntry = unsafe { lib.symbol("g_FuncLut")? };
 
         let new_mod = Box::new(
             Mod {
@@ -955,7 +955,7 @@ impl<'md> ModLoader<'md> {
                 load_fn,
 
                 extern_len: unsafe { *fixup_count },
-                fixups: unsafe { *fixup_table },
+                fixups: fixup_table,
             },
         );
 
@@ -964,7 +964,7 @@ impl<'md> ModLoader<'md> {
         {
             let mut lut = MOD_IMPORT_LUT.write().unwrap();
             for i in 0..unsafe { (*mod_ptr).extern_len } {
-                let orig_entry = unsafe { (*func_lut_table).add(i).read() };
+                let orig_entry = unsafe { func_lut_table.add(i).read() };
                 tracing::debug!(i, entry = ?orig_entry);
                 let ptr_val = orig_entry.fnptr as usize;
                 let res = lut.ptrs.as_slice().binary_search(&ptr_val);
