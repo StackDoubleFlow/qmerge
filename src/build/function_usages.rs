@@ -75,7 +75,6 @@ impl<'a> ModFunctionUsages<'a> {
     pub fn write_external(
         &mut self,
         compile_command: &mut CompileCommand,
-        mod_id: &str,
         data_builder: &mut ModDataBuilder,
         transformed_path: &Path,
         struct_defs: &HashMap<&str, StructDef>,

@@ -446,7 +446,6 @@ pub fn build(regen_cpp: bool) -> Result<()> {
 
     function_usages.write_external(
         &mut compile_command,
-        &mod_config.id,
         &mut data_builder,
         transformed_path,
         &struct_defs,

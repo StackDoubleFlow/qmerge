@@ -1,4 +1,6 @@
-﻿using Mono.Cecil;
+﻿using AsmResolver.DotNet;
+using AsmResolver.DotNet.Serialized;
+using AsmResolver.PE.DotNet.Metadata.Tables.Rows;
 
 // TODO: cli interface thing
 var publicizeMethods = false;
@@ -13,43 +15,28 @@ if (Directory.Exists(managedPath))
 
 var dummyPaths = Directory.GetFiles(inputPath);
 
-var assemblyResolver = new DefaultAssemblyResolver();
-assemblyResolver.AddSearchDirectory(inputPath);
-var readingParams = new ReaderParameters
-{
-    AssemblyResolver = assemblyResolver
-};
+var readingParams = new ModuleReaderParameters(inputPath);
 
 var dummyModule = new ModuleReference("MergePInvokeDummy");
 
 static void ProcessType(TypeDefinition type, ModuleReference dummyModule, bool publicizeMethods)
 {
-    foreach (var t in type.NestedTypes)
+    foreach (var method in type.Methods.Where(method => method.IsPInvokeImpl))
     {
-        ProcessType(t, dummyModule, publicizeMethods);
-    }
-    
-    foreach (var method in type.Methods.Where(method => method.HasPInvokeInfo))
-    {
-        // Console.WriteLine("Writing dummy PInvokeInfo for {0}", method.FullName);
-        const PInvokeAttributes attributes = PInvokeAttributes.NoMangle | PInvokeAttributes.CharSetAuto | PInvokeAttributes.CallConvCdecl;
-        method.PInvokeInfo = new PInvokeInfo(attributes, "MergePInvokeDummy", dummyModule);
-        if (publicizeMethods)
-        {
-            method.IsPublic = true;
-        }
+        const ImplementationMapAttributes attributes = ImplementationMapAttributes.NoMangle | ImplementationMapAttributes.CharSetAuto | ImplementationMapAttributes.CallConvCdecl;
+        method.ImplementationMap = new ImplementationMap(dummyModule, "MergePInvokeDummy", attributes);
     }
 }
 
 foreach (var path in dummyPaths)
 {
     var fileName = Path.GetFileName(path);
-    var module = ModuleDefinition.ReadModule(path, readingParams);
+    var module = ModuleDefinition.FromFile(path, readingParams);
 
-    module.ModuleReferences.Add(dummyModule);
-    foreach (var type in module.Types)
+    var imported = module.DefaultImporter.ImportModule(dummyModule);
+    foreach (var type in module.GetAllTypes())
     {
-        ProcessType(type, dummyModule, publicizeMethods);
+        ProcessType(type, imported, publicizeMethods);
     }
     
     module.Write(managedPath + fileName);
