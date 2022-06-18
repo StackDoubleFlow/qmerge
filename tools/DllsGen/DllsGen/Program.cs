@@ -45,7 +45,39 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
         
             var body = new CilMethodBody(method);
             var referenceBody = referenceMethod.CilMethodBody;
-                
+
+            body.MaxStack = referenceBody.MaxStack;
+            body.ComputeMaxStackOnBuild = false;
+            body.InitializeLocals = referenceBody.InitializeLocals;
+            
+            foreach (var localVariable in referenceBody.LocalVariables)
+            {
+                body.LocalVariables.Add(new CilLocalVariable(localVariable.VariableType.ImportWith(module.DefaultImporter)));
+            }
+            
+            foreach (var exceptionHandler in referenceBody.ExceptionHandlers)
+            {
+                ICilLabel? filterStart;
+                if (exceptionHandler.FilterStart is { } l)
+                {
+                    filterStart = l;
+                }
+                else
+                {
+                    filterStart = null;
+                }
+                body.ExceptionHandlers.Add(new CilExceptionHandler
+                {
+                    HandlerType = exceptionHandler.HandlerType,
+                    TryStart = new CilOffsetLabel(exceptionHandler.TryStart.Offset),
+                    TryEnd = new CilOffsetLabel(exceptionHandler.TryEnd.Offset),
+                    HandlerStart = new CilOffsetLabel(exceptionHandler.HandlerStart.Offset),
+                    HandlerEnd = new CilOffsetLabel(exceptionHandler.HandlerEnd.Offset),
+                    FilterStart = filterStart,
+                    ExceptionType = exceptionHandler.ExceptionType?.ImportWith(module.DefaultImporter),
+                });
+            }
+            
             try
             {
                 foreach (var instruction in referenceBody.Instructions)
