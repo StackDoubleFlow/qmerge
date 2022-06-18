@@ -11,7 +11,12 @@ using AsmResolver.PE.DotNet.Metadata.Tables.Rows;
 var publicizeMethods = false;
 var managedPath = "/home/stack/ledump/QuestModding/qmerge/example_mod/build/Managed/";
 var inputPath = "/home/stack/ledump/QuestModding/qmerge/test_analysis/cpp2il_out";
-var referencePath = "/home/stack/.local/share/Steam/steamapps/common/Beat Saber/Beat Saber_Data/Managed/";
+
+var referencePaths = new string[]
+{
+    "/home/stack/ledump/UnityEditor/2019.4.28f1/Editor/Data/MonoBleedingEdge/lib/mono/unityaot/",
+    "/home/stack/.local/share/Steam/steamapps/common/Beat Saber/Beat Saber_Data/Managed/",
+};
 
 if (Directory.Exists(managedPath))
 {
@@ -25,10 +30,10 @@ var readingParams = new ModuleReaderParameters(inputPath);
 
 var dummyModule = new ModuleReference("MergePInvokeDummy");
 
-static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleReference dummyModule, ModuleDefinition referenceModule)
+static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleReference dummyModule, ModuleDefinition? referenceModule)
 {
-    var referenceTypeRef = referenceModule.CreateTypeReference(type.Namespace, type.Name!);
-    var referenceType = referenceModule.MetadataResolver.ResolveType(referenceTypeRef);
+    var referenceTypeRef = referenceModule?.CreateTypeReference(type.Namespace, type.Name);
+    var referenceType = referenceModule?.MetadataResolver.ResolveType(referenceTypeRef);
 
     foreach (var method in type.Methods)
     {
@@ -155,7 +160,17 @@ foreach (var path in inputPaths)
     var fileName = Path.GetFileName(path);
     var module = ModuleDefinition.FromFile(path, readingParams);
 
-    var referenceModule = ModuleDefinition.FromFile(referencePath + fileName);
+    ModuleDefinition? referenceModule = null;
+    foreach (var referencePath in referencePaths)
+    {
+        var referenceModulePath = referencePath + fileName;
+        if (File.Exists(referenceModulePath))
+        {
+            Console.WriteLine("Using reference at " + referenceModulePath);
+            referenceModule = ModuleDefinition.FromFile(referenceModulePath);
+            break;
+        }
+    }
 
     var importedDummy = module.DefaultImporter.ImportModule(dummyModule);
     foreach (var type in module.GetAllTypes())
