@@ -6,6 +6,7 @@ using AsmResolver.DotNet.Signatures;
 using AsmResolver.DotNet.Signatures.Types;
 using AsmResolver.PE.DotNet.Cil;
 using AsmResolver.PE.DotNet.Metadata.Tables.Rows;
+using DllsGen;
 
 // TODO: cli interface thing
 var publicizeMethods = false;
@@ -30,7 +31,7 @@ var readingParams = new ModuleReaderParameters(inputPath);
 
 var dummyModule = new ModuleReference("MergePInvokeDummy");
 
-static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleReference dummyModule, ModuleDefinition? referenceModule)
+static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleReference dummyModule, ModuleDefinition? referenceModule, ReferenceConverter converter, SignatureComparer comparer)
 {
     var referenceTypeRef = referenceModule?.CreateTypeReference(type.Namespace, type.Name);
     var referenceType = referenceModule?.MetadataResolver.ResolveType(referenceTypeRef);
@@ -45,7 +46,29 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
 
         if (type.GenericParameters.Count > 0 || method.GenericParameters.Count > 0)
         {
-            var referenceMethod = (MethodDefinition?) referenceType?.CreateMemberReference(method.Name, method.Signature).Resolve();
+            var referenceMethod = (MethodDefinition?) referenceType?.CreateMemberReference(method.Name, method.Signature.ImportWith(referenceModule.DefaultImporter)).Resolve();
+            if (referenceType != null && referenceMethod == null)
+            {
+                foreach (var referenceTypeMethod in referenceType.Methods)
+                {
+                    if (referenceTypeMethod.Name == method.Name)
+                    {
+                        try
+                        {
+                            var convertedSig = converter.Convert(referenceTypeMethod.Signature);
+                            if (comparer.Equals(convertedSig, method.Signature))
+                            {
+                                referenceMethod = referenceTypeMethod;
+                                break;
+                            }
+                        }
+                        catch (Exception _)
+                        {
+                            // Console.WriteLine("failed to find reference for " + method);
+                        }
+                    }
+                }
+            }
             if (referenceMethod?.CilMethodBody == null) continue;
         
             var body = new CilMethodBody(method);
@@ -155,30 +178,49 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
     }
 }
 
+var modules = new List<ModuleDefinition>();
+var refModules = new List<ModuleDefinition?>();
+var refToShimAssembly = new Dictionary<string, AssemblyDefinition>();
 foreach (var path in inputPaths)
 {
     var fileName = Path.GetFileName(path);
     var module = ModuleDefinition.FromFile(path, readingParams);
-
+    modules.Add(module);
+    
     ModuleDefinition? referenceModule = null;
     foreach (var referencePath in referencePaths)
     {
         var referenceModulePath = referencePath + fileName;
         if (File.Exists(referenceModulePath))
         {
-            Console.WriteLine("Using reference at " + referenceModulePath);
-            referenceModule = ModuleDefinition.FromFile(referenceModulePath);
-            break;
+            if (referenceModule == null)
+            {
+                Console.WriteLine("Using reference at " + referenceModulePath);
+                referenceModule = ModuleDefinition.FromFile(referenceModulePath);
+                refToShimAssembly.Add(referenceModule.Assembly.Name, module.Assembly);
+            }
         }
     }
+    refModules.Add(referenceModule);
+}
 
+Console.WriteLine(refToShimAssembly);
+foreach (var (key, value) in refToShimAssembly)
+{
+    Console.WriteLine($"{key}: {value}");
+}
+
+foreach (var (module, referenceModule) in modules.Zip(refModules))
+{
     var importedDummy = module.DefaultImporter.ImportModule(dummyModule);
     foreach (var type in module.GetAllTypes())
     {
-        ProcessType(type, module, importedDummy, referenceModule);
+        ReferenceConverter converter = new ReferenceConverter(refToShimAssembly, module);
+        SignatureComparer comparer = new SignatureComparer();
+        ProcessType(type, module, importedDummy, referenceModule, converter, comparer);
     }
     
-    module.Write(managedPath + fileName);
+    module.Write(managedPath + module.Name);
 }
 
 Console.WriteLine("Done!");
