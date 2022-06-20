@@ -80,7 +80,7 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
             
             foreach (var localVariable in referenceBody.LocalVariables)
             {
-                body.LocalVariables.Add(new CilLocalVariable(localVariable.VariableType.ImportWith(module.DefaultImporter)));
+                body.LocalVariables.Add(new CilLocalVariable(converter.Convert(localVariable.VariableType).ImportWith(module.DefaultImporter)));
             }
             
             foreach (var exceptionHandler in referenceBody.ExceptionHandlers)
@@ -102,7 +102,7 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
                     HandlerStart = new CilOffsetLabel(exceptionHandler.HandlerStart.Offset),
                     HandlerEnd = new CilOffsetLabel(exceptionHandler.HandlerEnd.Offset),
                     FilterStart = filterStart,
-                    ExceptionType = exceptionHandler.ExceptionType?.ImportWith(module.DefaultImporter),
+                    ExceptionType = exceptionHandler.ExceptionType != null ? converter.Convert(exceptionHandler.ExceptionType).ImportWith(module.DefaultImporter) : null,
                 });
             }
             
