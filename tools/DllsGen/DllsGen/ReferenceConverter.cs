@@ -49,8 +49,10 @@ public class ReferenceConverter
             sig.TypeArguments.Select(Convert).ToArray()),
         FunctionPointerTypeSignature sig => new FunctionPointerTypeSignature(Convert(sig.Signature)),
         SzArrayTypeSignature sig => new SzArrayTypeSignature(Convert(sig.BaseType)),
-        CustomModifierTypeSignature sig => new CustomModifierTypeSignature(Convert(sig.ModifierType), sig.IsRequired,
-            Convert(sig.BaseType)),
+        // Custom modifiers aren't emmited in shim assemblies
+        // CustomModifierTypeSignature sig => new CustomModifierTypeSignature(Convert(sig.ModifierType), sig.IsRequired,
+        //     Convert(sig.BaseType)),
+        CustomModifierTypeSignature sig => Convert(sig.BaseType),
         SentinelTypeSignature sig => sig,
         _ => throw new Exception(),
     };
