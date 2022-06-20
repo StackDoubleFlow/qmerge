@@ -15,33 +15,27 @@ public class ReferenceConverter
         _module = module;
     }
 
-    public ModuleReference Convert(ModuleReference reference)
-    {
-        return new ModuleReference(reference.Name);
-    }
+    public ModuleReference Convert(ModuleReference reference) => new(reference.Name);
 
-    public TypeReference Convert(TypeReference reference)
+    public IResolutionScope Convert(IResolutionScope scope) => scope switch
     {
-        var assemblyName = reference.Resolve().Module.Assembly.Name;
-        var shimAssembly = _refToShimAssembly[assemblyName];
-        IResolutionScope scope = _module.Assembly == shimAssembly ? _module : _module.DefaultImporter.ImportScope(new AssemblyReference(_refToShimAssembly[assemblyName]));
-        return new TypeReference(_module, scope, reference.Namespace, reference.Name);
-    }
+        AssemblyReference assemblyReference => _module.DefaultImporter.ImportScope(
+            new AssemblyReference(_refToShimAssembly[assemblyReference.Name])),
+        ModuleDefinition _ => _module,
+        TypeReference typeRef => Convert(typeRef),
+        _ => throw new Exception()
+    };
 
-    public ITypeDefOrRef? Convert(ITypeDefOrRef typeDefOrRef)
-    {
-        switch (typeDefOrRef)
-        {
-            case TypeDefinition typeDef:
-                return new DefaultMetadataResolver(_module.MetadataResolver.AssemblyResolver).ResolveType(Convert(typeDef.ToTypeReference()));
-            case TypeReference typeRef:
-                return Convert(typeRef);
-            case TypeSpecification typeSpec:
-                return new TypeSpecification(Convert(typeSpec.Signature));
-        }
-        Console.WriteLine(typeDefOrRef.GetType().FullName);
-        return null;
-    }
+    public TypeReference Convert(TypeReference reference) => new(_module, Convert(reference.Scope), reference.Namespace, reference.Name);
+
+    public ITypeDefOrRef? Convert(ITypeDefOrRef typeDefOrRef) => typeDefOrRef switch {
+        TypeDefinition typeDef =>
+            new DefaultMetadataResolver(_module.MetadataResolver.AssemblyResolver).ResolveType(
+                Convert(typeDef.ToTypeReference())),
+        TypeReference typeRef => Convert(typeRef),
+        TypeSpecification typeSpec => new TypeSpecification(Convert(typeSpec.Signature)),
+        _ => throw new Exception()
+    };
 
     public TypeSignature Convert(TypeSignature anySig) => anySig switch
     {
@@ -49,7 +43,7 @@ public class ReferenceConverter
         PointerTypeSignature sig => new PointerTypeSignature(Convert(sig.BaseType)),
         ByReferenceTypeSignature sig => new ByReferenceTypeSignature(Convert(sig.BaseType)),
         TypeDefOrRefSignature sig => new TypeDefOrRefSignature(Convert(sig.Type)),
-        GenericParameterSignature sig => new GenericParameterSignature(sig.ParameterType, sig.Index),
+        GenericParameterSignature sig => new GenericParameterSignature((ModuleDefinition) Convert(sig.Scope), sig.ParameterType, sig.Index),
         ArrayTypeSignature sig => new ArrayTypeSignature(Convert(sig.BaseType), sig.Dimensions.ToArray()),
         GenericInstanceTypeSignature sig => new GenericInstanceTypeSignature(Convert(sig.GenericType), sig.IsValueType,
             sig.TypeArguments.Select(Convert).ToArray()),
@@ -61,10 +55,7 @@ public class ReferenceConverter
         _ => throw new Exception(),
     };
 
-    public FieldSignature Convert(FieldSignature sig)
-    {
-        return new FieldSignature(sig.Attributes, Convert(sig.FieldType));
-    }
+    public FieldSignature Convert(FieldSignature sig) => new(sig.Attributes, Convert(sig.FieldType));
 
     public IFieldDescriptor Convert(IFieldDescriptor descriptor) => descriptor switch
     {
@@ -91,13 +82,10 @@ public class ReferenceConverter
         return new MemberReference(parent, reference.Name, sig);
     }
 
-    public MethodSignature Convert(MethodSignature sig)
+    public MethodSignature Convert(MethodSignature sig)=> new(sig.Attributes, Convert(sig.ReturnType), sig.ParameterTypes.Select(Convert))
     {
-        return new MethodSignature(sig.Attributes, Convert(sig.ReturnType), sig.ParameterTypes.Select(Convert))
-        {
-            GenericParameterCount = sig.GenericParameterCount
-        };
-    }
+        GenericParameterCount = sig.GenericParameterCount
+    };
 
     public GenericInstanceMethodSignature Convert(GenericInstanceMethodSignature sig)
     {
