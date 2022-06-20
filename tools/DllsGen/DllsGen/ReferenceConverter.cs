@@ -6,8 +6,8 @@ namespace DllsGen;
 
 public class ReferenceConverter
 {
-    private Dictionary<string, AssemblyDefinition> _refToShimAssembly;
-    private ModuleDefinition _module;
+    private readonly Dictionary<string, AssemblyDefinition> _refToShimAssembly;
+    private readonly ModuleDefinition _module;
 
     public ReferenceConverter(Dictionary<string, AssemblyDefinition> refToShimAssembly, ModuleDefinition module)
     {
@@ -15,11 +15,16 @@ public class ReferenceConverter
         _module = module;
     }
 
+    public ModuleReference Convert(ModuleReference reference)
+    {
+        return new ModuleReference(reference.Name);
+    }
+
     public TypeReference Convert(TypeReference reference)
     {
         var assemblyName = reference.Resolve().Module.Assembly.Name;
         var shimAssembly = _refToShimAssembly[assemblyName];
-        IResolutionScope scope = _module.Assembly == shimAssembly ? _module : new AssemblyReference(_refToShimAssembly[assemblyName]);
+        IResolutionScope scope = _module.Assembly == shimAssembly ? _module : _module.DefaultImporter.ImportScope(new AssemblyReference(_refToShimAssembly[assemblyName]));
         return new TypeReference(_module, scope, reference.Namespace, reference.Name);
     }
 
@@ -38,37 +43,52 @@ public class ReferenceConverter
         return null;
     }
 
-    public TypeSignature Convert(TypeSignature anySig)
+    public TypeSignature Convert(TypeSignature anySig) => anySig switch
     {
-        switch (anySig)
+        CorLibTypeSignature sig => _module.CorLibTypeFactory.FromElementType(sig.ElementType),
+        PointerTypeSignature sig => new PointerTypeSignature(Convert(sig.BaseType)),
+        ByReferenceTypeSignature sig => new ByReferenceTypeSignature(Convert(sig.BaseType)),
+        TypeDefOrRefSignature sig => new TypeDefOrRefSignature(Convert(sig.Type)),
+        GenericParameterSignature sig => new GenericParameterSignature(sig.ParameterType, sig.Index),
+        ArrayTypeSignature sig => new ArrayTypeSignature(Convert(sig.BaseType), sig.Dimensions.ToArray()),
+        GenericInstanceTypeSignature sig => new GenericInstanceTypeSignature(Convert(sig.GenericType), sig.IsValueType,
+            sig.TypeArguments.Select(Convert).ToArray()),
+        FunctionPointerTypeSignature sig => new FunctionPointerTypeSignature(Convert(sig.Signature)),
+        SzArrayTypeSignature sig => new SzArrayTypeSignature(Convert(sig.BaseType)),
+        CustomModifierTypeSignature sig => new CustomModifierTypeSignature(Convert(sig.ModifierType), sig.IsRequired,
+            Convert(sig.BaseType)),
+        SentinelTypeSignature sig => sig,
+        _ => throw new Exception(),
+    };
+
+    public FieldSignature Convert(FieldSignature sig)
+    {
+        return new FieldSignature(sig.Attributes, Convert(sig.FieldType));
+    }
+
+    public IFieldDescriptor Convert(IFieldDescriptor descriptor) => descriptor switch
+    {
+        FieldDefinition def => (FieldDefinition) Convert(def.DeclaringType)
+            .CreateMemberReference(def.Name, Convert(def.Signature))
+            .Resolve(),
+        _ => throw new Exception()
+    };
+
+    public MemberReference Convert(MemberReference reference)
+    {
+        IMemberRefParent? parent = reference.Parent switch
         {
-            case CorLibTypeSignature sig:
-                return _module.CorLibTypeFactory.FromElementType(sig.ElementType);
-            case PointerTypeSignature sig:
-                return new PointerTypeSignature(Convert(sig.BaseType));
-            case ByReferenceTypeSignature sig:
-                return new ByReferenceTypeSignature(Convert(sig.BaseType));
-            case TypeDefOrRefSignature sig:
-                return new TypeDefOrRefSignature(Convert(sig.Type));
-            case GenericParameterSignature sig:
-                return new GenericParameterSignature(sig.ParameterType, sig.Index);
-            case ArrayTypeSignature sig:
-                return new ArrayTypeSignature(Convert(sig.BaseType), sig.Dimensions.ToArray());
-            case GenericInstanceTypeSignature sig:
-                return new GenericInstanceTypeSignature(Convert(sig.GenericType), sig.IsValueType,
-                    sig.TypeArguments.Select(Convert).ToArray());
-            case FunctionPointerTypeSignature sig:
-                return new FunctionPointerTypeSignature(Convert(sig.Signature));
-            case SzArrayTypeSignature sig:
-                return new SzArrayTypeSignature(Convert(sig.BaseType));
-            case CustomModifierTypeSignature sig:
-                return new CustomModifierTypeSignature(Convert(sig.ModifierType), sig.IsRequired,
-                    Convert(sig.BaseType));
-            case SentinelTypeSignature sig:
-                return sig;
-            default:
-                throw new Exception();
-        }
+            ITypeDefOrRef typeDefOrRef => Convert(typeDefOrRef),
+            ModuleReference moduleReference => Convert(moduleReference),
+            _ => throw new Exception()
+        };
+        MemberSignature sig = reference.Signature switch
+        {
+            MethodSignature methodSignature => Convert(methodSignature),
+            FieldSignature fieldSignature => Convert(fieldSignature),
+            _ => throw new Exception()
+        };
+        return new MemberReference(parent, reference.Name, sig);
     }
 
     public MethodSignature Convert(MethodSignature sig)
@@ -78,9 +98,20 @@ public class ReferenceConverter
             GenericParameterCount = sig.GenericParameterCount
         };
     }
-    
-    public IMethodDescriptor Convert(IMethodDescriptor descriptor)
+
+    public GenericInstanceMethodSignature Convert(GenericInstanceMethodSignature sig)
     {
-        return null;
+        return new GenericInstanceMethodSignature(sig.Attributes, sig.TypeArguments.Select(Convert).ToArray());
     }
+    
+    public IMethodDescriptor Convert(IMethodDescriptor descriptor) => descriptor switch
+    {
+        MethodDefinition def => (MethodDefinition) Convert(def.DeclaringType)
+            .CreateMemberReference(def.Name, Convert(def.Signature))
+            .Resolve(),
+        MethodSpecification spec => new MethodSpecification((IMethodDefOrRef) Convert(spec.Method),
+            Convert(spec.Signature)),
+        MemberReference reference => Convert(reference),
+        _ => throw new Exception()
+    };
 }

@@ -117,32 +117,27 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
                         {
                             if (reference.IsField)
                             {
-                                newOperand = module.DefaultImporter.ImportField(((IFieldDescriptor) reference).Resolve());
+                                newOperand = module.DefaultImporter.ImportField(converter.Convert(reference));
                             } 
                             else if (reference.IsMethod)
                             {
-                                newOperand = module.DefaultImporter.ImportMethod(((IMethodDescriptor) reference).Resolve());
+                                newOperand = module.DefaultImporter.ImportMethod(converter.Convert(reference));
                             }
                             break;
                         }
                         case IMethodDescriptor descriptor:
                         {
-                            newOperand = module.DefaultImporter.ImportMethod(descriptor);
+                            newOperand = module.DefaultImporter.ImportMethod(converter.Convert(descriptor));
                             break;
                         }
                         case IFieldDescriptor descriptor:
                         {
-                            newOperand = module.DefaultImporter.ImportField(descriptor);
+                            newOperand = module.DefaultImporter.ImportField(converter.Convert(descriptor));
                             break;
                         }
-                        case TypeSpecification spec:
+                        case ITypeDefOrRef defOrRef:
                         {
-                            newOperand = spec.ImportWith(module.DefaultImporter);
-                            break;
-                        }
-                        case ITypeDescriptor def:
-                        {
-                            newOperand = module.DefaultImporter.ImportType(def.Resolve());
+                            newOperand = module.DefaultImporter.ImportType(converter.Convert(defOrRef));
                             break;
                         }
                         case CilInstructionLabel label:
