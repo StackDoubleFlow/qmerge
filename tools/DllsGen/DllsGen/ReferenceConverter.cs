@@ -21,21 +21,28 @@ public class ReferenceConverter
 
     public ModuleReference Convert(ModuleReference reference) => new(reference.Name);
 
+    public AssemblyReference MakeAssemblyReference(string name)
+    {
+        return (AssemblyReference) _module.DefaultImporter.ImportScope(new AssemblyReference(_refToShimAssembly[name]));
+    }
+
     public IResolutionScope Convert(IResolutionScope scope) => scope switch
     {
-        AssemblyReference assemblyReference => _module.DefaultImporter.ImportScope(
-            new AssemblyReference(_refToShimAssembly[assemblyReference.Name])),
+        AssemblyReference assemblyReference => MakeAssemblyReference(assemblyReference.Name),
         ModuleDefinition _ => _module,
         TypeReference typeRef => Convert(typeRef),
         _ => throw new Exception()
     };
 
-    public TypeReference Convert(TypeReference reference) => new(_module, Convert(reference.Scope), reference.Namespace, reference.Name);
+    public TypeReference Convert(TypeReference reference)
+    {
+        var def = reference.Resolve();
+        var scope = def?.DeclaringType == null && def.Module.Name != _module.Name ? MakeAssemblyReference(def.Module.Assembly.Name) : Convert(reference.Scope);
+        return new TypeReference(_module, scope, reference.Namespace, reference.Name);
+    }
 
     public ITypeDefOrRef? Convert(ITypeDefOrRef typeDefOrRef) => typeDefOrRef switch {
-        TypeDefinition typeDef =>
-            new DefaultMetadataResolver(_module.MetadataResolver.AssemblyResolver).ResolveType(
-                Convert(typeDef.ToTypeReference())),
+        TypeDefinition typeDef => _module.MetadataResolver.ResolveType(Convert(typeDef.ToTypeReference())),
         TypeReference typeRef => Convert(typeRef),
         TypeSpecification typeSpec => new TypeSpecification(Convert(typeSpec.Signature)),
         _ => throw new Exception()
