@@ -31,10 +31,57 @@ var readingParams = new ModuleReaderParameters(inputPath);
 
 var dummyModule = new ModuleReference("MergePInvokeDummy");
 
+static void FixIntPtrInModule(ModuleDefinition module)
+{
+    foreach (var type in module.TopLevelTypes)
+    {
+        foreach (var methodDefinition in type.Methods)
+        {
+            var sig = methodDefinition.Signature;
+            if (sig.ReturnType.ElementType == ElementType.ValueType && sig.ReturnType.Namespace == "System" && sig.ReturnType.Name == "IntPtr")
+            {
+                Console.WriteLine("Fixing IntPtr in " + methodDefinition.Module.FilePath);
+                Console.WriteLine("For method " + methodDefinition);
+                sig.ReturnType = module.CorLibTypeFactory.IntPtr;
+            }
+
+            for (var i = 0; i < sig.ParameterTypes.Count; i++)
+            {
+                var paramType = sig.ParameterTypes[i];
+                if (paramType.IsValueType && paramType.Namespace == "System" && paramType.Name == "IntPtr")
+                {
+                    sig.ParameterTypes[i] = module.CorLibTypeFactory.IntPtr;
+                }
+                if (paramType.IsValueType && paramType.Namespace == "System" && paramType.Name == "UIntPtr")
+                {
+                    sig.ParameterTypes[i] = module.CorLibTypeFactory.UIntPtr;
+                }
+            }
+        }
+    }
+}
+
+static TypeDefinition? FindTypeInModule(TypeDefinition type, ModuleDefinition module)
+{
+    IResolutionScope scope = module;
+    if (type.DeclaringType != null)
+    {
+        var declType = FindTypeInModule(type.DeclaringType, module);
+        if (declType == null)
+            return null;
+        scope = declType.ToTypeReference();
+    }
+    
+    return new TypeReference(module, scope, type.Namespace, type.Name).Resolve();
+}
+
 static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleReference dummyModule, ModuleDefinition? referenceModule, ReferenceConverter converter, SignatureComparer comparer)
 {
-    var referenceTypeRef = referenceModule?.CreateTypeReference(type.Namespace, type.Name);
-    var referenceType = referenceModule?.MetadataResolver.ResolveType(referenceTypeRef);
+    if (type.Namespace == "Cpp2IlInjected")
+        return;
+    var referenceType = FindTypeInModule(type, referenceModule);
+    if (referenceType == null)
+        Console.WriteLine("Could not find reference type for " + type);
 
     foreach (var method in type.Methods)
     {
@@ -204,6 +251,9 @@ foreach (var (key, value) in refToShimAssembly)
 {
     Console.WriteLine($"{key}: {value}");
 }
+
+// wtf
+FixIntPtrInModule(refToShimAssembly["mscorlib"].ManifestModule);
 
 foreach (var (module, referenceModule) in modules.Zip(refModules))
 {

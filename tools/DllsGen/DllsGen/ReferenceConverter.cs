@@ -1,9 +1,13 @@
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.DotNet.Signatures.Types;
+using AsmResolver.PE.DotNet.Metadata.Tables.Rows;
 
 namespace DllsGen;
 
+/// <summary>
+/// Convert references from reference assemblies to references from shim assemblies.
+/// </summary>
 public class ReferenceConverter
 {
     private readonly Dictionary<string, AssemblyDefinition> _refToShimAssembly;
@@ -94,7 +98,7 @@ public class ReferenceConverter
         return new GenericInstanceMethodSignature(sig.Attributes, sig.TypeArguments.Select(Convert).ToArray());
     }
     
-    public IMethodDescriptor Convert(IMethodDescriptor descriptor) => descriptor switch
+    public IMethodDescriptor? Convert(IMethodDescriptor descriptor) => descriptor switch
     {
         MethodDefinition def => (MethodDefinition) Convert(def.DeclaringType)
             .CreateMemberReference(def.Name, Convert(def.Signature))
