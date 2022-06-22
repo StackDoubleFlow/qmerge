@@ -426,6 +426,22 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         fs::read_to_string(cpp_path.join("Il2CppGenericMethodPointerTable.cpp"))?;
     let gen_method_ptr_table = generics::read_method_ptr_table(&gen_method_ptrs_src)?;
 
+    let (usage_fds, usages_len) = metadata_usage::transform(
+        &mut compile_command,
+        cpp_path,
+        transformed_path,
+        &mut data_builder,
+        &metadata_usage_names,
+    )?;
+
+    data_builder.process_generic_funcs(&mut function_usages);
+
+    let gen_adj_thunks = function_usages.write_generic_adj_thunk_table(
+        &mut compile_command,
+        transformed_path,
+        cpp_path,
+    )?;
+
     let generic_transform_data = generics::transform(
         &mut function_usages,
         &mut data_builder,
@@ -434,14 +450,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         &generic_sources,
         &gen_method_ptr_table,
         &app.shims,
-    )?;
-
-    let (usage_fds, usages_len) = metadata_usage::transform(
-        &mut compile_command,
-        cpp_path,
-        transformed_path,
-        &mut data_builder,
-        metadata_usage_names,
+        &gen_adj_thunks,
     )?;
 
     function_usages.write_external(
@@ -456,18 +465,13 @@ pub fn build(regen_cpp: bool) -> Result<()> {
         invoker_pointers: function_usages.required_invokers.len(),
         metadata_usages: usages_len,
     };
-    let mod_data = data_builder.build(&mut function_usages, code_table_sizes)?;
+    let mod_data = data_builder.build(code_table_sizes)?;
     // dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(
         &mut compile_command,
         transformed_path,
         &gen_method_ptr_table,
-    )?;
-    let gen_adj_thunks = function_usages.write_generic_adj_thunk_table(
-        &mut compile_command,
-        transformed_path,
-        cpp_path,
     )?;
     generics::write(
         generic_transform_data,

@@ -99,6 +99,7 @@ pub struct ModDataBuilder<'md, 'ty> {
 
     generic_methods: Vec<GenericMethodInst>,
     generic_method_map: HashMap<u32, usize>,
+    generic_funcs: Option<Vec<GenericMethodFunctions>>,
 
     generic_classes: Vec<GenericClassInst>,
     generic_class_map: HashMap<u32, usize>,
@@ -126,6 +127,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             method_def_map: HashMap::new(),
             generic_methods: Vec::new(),
             generic_method_map: HashMap::new(),
+            generic_funcs: None,
             generic_classes: Vec::new(),
             generic_class_map: HashMap::new(),
             generic_insts: Vec::new(),
@@ -423,7 +425,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 self.metadata.generic_containers[method.generic_container_index as usize].type_argc
             } else {
                 0
-            }
+            },
         };
         self.methods.push(desc);
         self.method_def_map.insert(idx, desc_idx);
@@ -486,19 +488,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(())
     }
 
-    pub fn build(
-        mut self,
-        function_usages: &mut ModFunctionUsages,
-        code_table_sizes: CodeTableSizes,
-    ) -> Result<MergeModData> {
-        self.fixup_types()?;
-        let ModDefinitions {
-            added_assembly,
-            added_image,
-            added_type_defintions,
-        } = self
-            .mod_definitions
-            .context("tried to build mod data without mod defintions")?;
+    pub fn process_generic_funcs(&mut self, function_usages: &mut ModFunctionUsages) {
         let mut generic_funcs = Vec::new();
         for i in 0..self.generic_methods.len() {
             let orig_idx = self
@@ -522,6 +512,18 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                     .map(|idx| function_usages.add_generic_adj_thunk(idx)),
             })
         }
+        self.generic_funcs = Some(generic_funcs);
+    }
+
+    pub fn build(mut self, code_table_sizes: CodeTableSizes) -> Result<MergeModData> {
+        self.fixup_types()?;
+        let ModDefinitions {
+            added_assembly,
+            added_image,
+            added_type_defintions,
+        } = self
+            .mod_definitions
+            .context("tried to build mod data without mod defintions")?;
         Ok(MergeModData {
             code_table_sizes,
 
@@ -538,7 +540,9 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
 
             generic_instances: self.generic_insts,
             generic_method_insts: self.generic_methods,
-            generic_method_funcs: generic_funcs,
+            generic_method_funcs: self
+                .generic_funcs
+                .context("tried to build mod data without processing generic funcs")?,
             generic_class_insts: self.generic_classes,
         })
     }
@@ -632,6 +636,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     }
 
     fn add_generic_method(&mut self, idx: u32) -> Result<usize> {
+        if self.generic_funcs.is_some() {
+            bail!("tried to add generic method after generic funcs were already processed");
+        }
+
         if self.generic_method_map.contains_key(&idx) {
             return Ok(self.generic_method_map[&idx]);
         }
@@ -692,6 +700,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
 
         let mut map = HashMap::new();
         for func in funcs {
+            if func.ends_with("_inline") {
+                map.insert(func, false);
+                continue;
+            }
             let func_idx = method_ptrs
                 .iter()
                 .position(|&s| s == func)

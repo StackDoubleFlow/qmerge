@@ -80,7 +80,7 @@ impl<'a> ModFunctionUsages<'a> {
         struct_defs: &HashMap<&str, StructDef>,
     ) -> Result<()> {
         let mut external_src = String::new();
-        
+
         writeln!(external_src, "#include \"codegen/il2cpp-codegen.h\"")?;
         writeln!(external_src, "#include \"merge/codegen.h\"")?;
         writeln!(external_src)?;
@@ -88,7 +88,7 @@ impl<'a> ModFunctionUsages<'a> {
         writeln!(external_src, "extern const size_t g_ExternFuncCount;")?;
         writeln!(external_src, "extern void* g_MethodFixups[];")?;
         writeln!(external_src, "extern const func_lut_entry_t g_FuncLut[];")?;
-        
+
         writeln!(external_src)?;
 
         let mut added_structs = HashSet::new();
@@ -139,7 +139,11 @@ impl<'a> ModFunctionUsages<'a> {
                 .collect();
             let params = params.join(", ");
 
-            writeln!(external_src, "__attribute__((noinline))\n{}\n__attribute__((disable_tail_calls))\n{{", decl)?;
+            writeln!(
+                external_src,
+                "__attribute__((noinline))\n{}\n__attribute__((disable_tail_calls))\n{{",
+                decl
+            )?;
             writeln!(
                 external_src,
                 "    return (({} (*){})(g_MethodFixups[{}]))({});",
@@ -152,7 +156,11 @@ impl<'a> ModFunctionUsages<'a> {
 
         // write the fixups table
 
-        writeln!(external_src, "const size_t g_ExternFuncCount = {};", added_fns.len())?;
+        writeln!(
+            external_src,
+            "const size_t g_ExternFuncCount = {};",
+            added_fns.len()
+        )?;
         writeln!(external_src, "void* g_MethodFixups[{}] =", added_fns.len())?;
         writeln!(external_src, "{{")?;
         for _ in &added_fns {
@@ -163,7 +171,11 @@ impl<'a> ModFunctionUsages<'a> {
 
         // write the lookup table
         // the lookup table is const because it's going to be copied into a modloader datastructure to be sorted anyway
-        writeln!(external_src, "const func_lut_entry_t g_FuncLut[{}] =", added_fns.len())?;
+        writeln!(
+            external_src,
+            "const func_lut_entry_t g_FuncLut[{}] =",
+            added_fns.len()
+        )?;
         writeln!(external_src, "{{")?;
         for (fun, idx) in added_fns {
             writeln!(external_src, "    {{ (void*)&{}, {} }},", fun, idx)?;

@@ -86,12 +86,13 @@ pub fn try_parse_call(line: &str, include_inline: bool) -> Option<&str> {
         // Inlined functions will be defined in the same file anyways
         return None;
     }
-    let len = possible_name.len();
-    if possible_name.len() <= 42 {
+    let test_name = possible_name.trim_end_matches("_inline");
+    let len = test_name.len();
+    if test_name.len() <= 42 {
         return None;
     }
-    if &possible_name[len - 42..len - 40] == "_m" {
-        let valid_id = possible_name[possible_name.len() - 40..]
+    if &test_name[len - 42..len - 40] == "_m" {
+        let valid_id = test_name[len - 40..]
             .chars()
             .all(|c| ('A'..='Z').contains(&c) || ('0'..='9').contains(&c));
         if valid_id {

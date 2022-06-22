@@ -12,7 +12,7 @@ pub fn transform(
     cpp_path: &Path,
     transformed_path: &Path,
     data_buider: &mut ModDataBuilder,
-    mod_functions: HashSet<String>,
+    mod_functions: &HashSet<String>,
 ) -> Result<(Vec<String>, usize)> {
     let src = fs::read_to_string(cpp_path.join("Il2CppMetadataUsage.c"))?;
 

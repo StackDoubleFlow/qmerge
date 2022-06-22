@@ -47,13 +47,13 @@ fn process_line<'a>(
         return Ok(());
     }
 
-    if usage.ends_with("_inline") {
+    if let Some(gshared) = function_usages.generic_proxies.get(usage) {
+        gshared_queue.push(gshared);
+    } else if usage.ends_with("_inline") {
         inline_queue.push((usage, src_idx));
     } else if function_usages.external_methods.contains_key(usage) {
         function_usages.using_external.insert(usage);
         function_usages.generic_using_fns.insert(usage);
-    } else if let Some(gshared) = function_usages.generic_proxies.get(usage) {
-        gshared_queue.push(gshared);
     } else if function_usages.mod_functions.contains(usage) {
         function_usages.generic_using_fns.insert(usage);
     } else {
@@ -126,6 +126,7 @@ pub fn transform<'a>(
     sources: &'a [String],
     method_ptrs: &[&str],
     shims: &HashSet<String>,
+    gen_adj_thunks: &HashSet<String>,
 ) -> Result<GenericTransformData<'a>> {
     let mut inline_functions = HashSet::new();
     let mut def_src_map = HashMap::new();
@@ -158,11 +159,44 @@ pub fn transform<'a>(
         .cloned()
         .collect::<Vec<_>>();
     let mut inline_queue = Vec::new();
+
+    for (src_idx, src) in sources.iter().enumerate() {
+        let mut lines = src.lines();
+        while let Some(line) = lines.next() {
+            if line.ends_with(';') {
+                continue;
+            }
+            if let Some(fn_def) = FnDecl::try_parse(line) {
+                if line.ends_with(';') {
+                    continue;
+                }
+                if gen_adj_thunks.contains(fn_def.name) {
+                    for _ in 0..3 {
+                        lines.next();
+                    }
+                    let line = lines.next().unwrap();
+                    let call = line.trim().trim_start_matches("return ");
+                    process_line(
+                        call,
+                        src_idx,
+                        function_usages,
+                        &visited,
+                        &mut gshared_queue,
+                        &mut inline_queue,
+                    )?;
+                }
+            }
+        }
+    }
+
     loop {
         if gshared_queue.is_empty() && inline_queue.is_empty() {
             break;
         }
         while let Some(gshared) = gshared_queue.pop() {
+            if let Some(non_inline) = gshared.strip_suffix("_inline") {
+                visited.insert(non_inline);
+            }
             visited.insert(gshared);
             // source name can be empty because this will never be inline
             metadata_usage_names.insert(get_md_usage_name(gshared, ""));
@@ -278,9 +312,13 @@ pub fn write(
     }
     writeln!(external_src)?;
     for &func in funcs.keys() {
-        let fd = function_usages.forward_decls[func];
-        writeln!(external_src, "{};", fd)?;
+        if let Some(&fd) = function_usages.forward_decls.get(func) {
+            writeln!(external_src, "{};", fd)?;
+        }
     }
+
+    let mut written_proxes = HashSet::new();
+    let mut written_gshared_inline = HashSet::new();
 
     for src in sources {
         let mut lines = src.lines();
@@ -290,6 +328,13 @@ pub fn write(
             }
             if let Some(fn_def) = FnDecl::try_parse(line) {
                 if let Some(&stub) = funcs.get(fn_def.name) {
+                    if fn_def.name.ends_with("_inline") {
+                        if written_gshared_inline.contains(fn_def.name) {
+                            continue;
+                        } else {
+                            written_gshared_inline.insert(fn_def.name);
+                        }
+                    }
                     let source_name = &source_names[def_src_map[fn_def.name]];
                     writeln!(
                         external_src,
@@ -321,7 +366,8 @@ pub fn write(
             } else if line.starts_with("inline") {
                 let proxy_name = function_usages.parse_gshared_proxy_decl(line);
                 if let Some(&name) = function_usages.generic_proxies.get(proxy_name) {
-                    if funcs.contains_key(name) {
+                    if funcs.contains_key(name) && !written_proxes.contains(proxy_name) {
+                        written_proxes.insert(proxy_name);
                         writeln!(external_src, "{}", line)?;
                         loop {
                             let line = lines.next().unwrap();
