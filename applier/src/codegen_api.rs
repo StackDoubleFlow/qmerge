@@ -1,6 +1,7 @@
-use crate::il2cpp_types::MethodInfo;
+use crate::il2cpp_types::{Il2CppImage, MethodInfo};
 use crate::modloader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
+use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
 use std::ffi::CStr;
 use std::lazy::{SyncLazy, SyncOnceCell};
@@ -40,6 +41,18 @@ pub extern "C" fn merge_codegen_initialize_method(
     _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32);
 }
 
+fn get_method_pointer(image: *const Il2CppImage, token: u32) -> Result<unsafe extern "C" fn()> {
+    let rid = token & 0x00FFFFFF;
+    // let table = token & 0xFF000000;
+    ensure!(rid != 0);
+
+    let code_gen_module = unsafe { &*(*image).codeGenModule };
+    ensure!(rid <= code_gen_module.methodPointerCount);
+
+    unsafe { code_gen_module.methodPointers.add(rid as usize - 1).read() }
+        .context("method pointer was null")
+}
+
 pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsafe extern "C" fn() {
     let addr = fn_addr as usize;
 
@@ -59,9 +72,15 @@ pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsaf
     let real_idx = mod_info.refs.method_refs[info.ref_index];
     let method_info = get_method_info_from_idx(real_idx);
 
+    let class = unsafe { &*method_info.klass };
+    let ptr = if class.valuetype() != 0 {
+        get_method_pointer(class.image, method_info.token).unwrap()
+    } else {
+        method_info.methodPointer.unwrap()
+    };
+
     // update the mod's fixup table entry to point to the relevant function pointer
     let fixup_idx = info.fixup_index;
-    let ptr = method_info.methodPointer.unwrap();
     unsafe { (*mod_info.fixups.add(fixup_idx)).value = ptr };
 
     // return that function pointer
