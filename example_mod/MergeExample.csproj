@@ -9,7 +9,13 @@
         </Reference>
     </ItemGroup>
 
+    <ItemGroup>
+      <Compile Remove="build\**" />
+      <EmbeddedResource Remove="build\**" />
+      <None Remove="build\**" />
+    </ItemGroup>
+
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-        <Exec Command="cargo rr -- build --regen-cpp $(OutputPath)"/>
+        <Exec Command="cargo rr -- build --regen-cpp $(OutputPath)" />
     </Target>
 </Project>
