@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <!-- <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences> -->
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>build/Managed/UnityEngine.CoreModule.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+</Project>
