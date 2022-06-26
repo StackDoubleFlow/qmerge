@@ -36,6 +36,8 @@ public class Example
 {
     public static void Main()
     {
+        Debug.Log("Hello world");
+
         // Create a list of parts.
         List<Part> parts = new List<Part>();
 

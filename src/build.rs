@@ -227,7 +227,16 @@ fn convert_codegen_init_method(source: &str, mod_id: &str, write_header: bool) -
     Ok(new_src)
 }
 
-pub fn build(regen_cpp: bool) -> Result<()> {
+fn copy_input(mod_config: &Mod, input_dir: String) -> Result<()> {
+    let input_dir = Path::new(&input_dir);
+    let file_name = mod_config.id.clone() + ".dll";
+    let managed_path = PathBuf::from("./build/Managed").join(&file_name);
+    fs::copy(input_dir.join(file_name), managed_path)?;
+
+    Ok(())
+}
+
+pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
     let mod_config = Mod::read_config()?;
     let app = APPS
         .get(&mod_config.app)
@@ -260,6 +269,7 @@ pub fn build(regen_cpp: bool) -> Result<()> {
 
     let cpp_path = Path::new("./build/sources/cpp");
     if regen_cpp {
+        copy_input(&mod_config, input_dir)?;
         if cpp_path.exists() {
             fs::remove_dir_all(&cpp_path)?;
         }
