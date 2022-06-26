@@ -99,7 +99,7 @@ impl CodegenProxy {
         };
         let param_names = &self.param_names;
         Ok(quote! {
-            static GAME_FN: SyncLazy<#game_fn_ty> = SyncLazy::new(|| {
+            static GAME_FN: LazyLock<#game_fn_ty> = LazyLock::new(|| {
                 let ptr = xref::get_symbol(#proxy_to).unwrap();
                 unsafe { transmute(ptr) }
             });

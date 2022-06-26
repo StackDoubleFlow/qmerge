@@ -18,7 +18,7 @@ use merge_data::MergeModData;
 use metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use modloader::{ModLoader, MODS};
 use std::fs;
-use std::lazy::SyncLazy;
+use std::sync::LazyLock;
 use std::mem::transmute;
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -33,7 +33,7 @@ fn get_exec_path() -> PathBuf {
     PathBuf::from("/data/data/com.beatgames.beatsaber")
 }
 
-static LOAD_METADATA_HOOK: SyncLazy<Hook> = SyncLazy::new(|| {
+static LOAD_METADATA_HOOK: LazyLock<Hook> = LazyLock::new(|| {
     let addr = xref::get_symbol("_ZN6il2cpp2vm14MetadataLoader16LoadMetadataFileEPKc").unwrap();
     let hook = Hook::new();
     unsafe {
@@ -117,7 +117,7 @@ fn load_mods(
 pub extern "C" fn setup() {
     setup::setup(env!("CARGO_PKG_NAME"));
     info!("merge applier is setting up");
-    SyncLazy::force(&LOAD_METADATA_HOOK);
+    LazyLock::force(&LOAD_METADATA_HOOK);
 }
 
 fn call_plugin_loads() -> Result<()> {
