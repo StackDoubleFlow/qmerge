@@ -8,17 +8,17 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
 use std::fs;
-use std::lazy::{SyncLazy, SyncOnceCell};
+use std::sync::{LazyLock, OnceLock};
 use std::mem::transmute;
 use tracing::debug;
 
-static LIBIL2CPP: SyncLazy<Library> = SyncLazy::new(|| Library::open("libil2cpp.so").unwrap());
+static LIBIL2CPP: LazyLock<Library> = LazyLock::new(|| Library::open("libil2cpp.so").unwrap());
 
-static XREF_DATA: SyncLazy<XRefData> = SyncLazy::new(|| {
+static XREF_DATA: LazyLock<XRefData> = LazyLock::new(|| {
     let path = get_mod_data_path().join("xref_gen.json");
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 });
-static XREF_ROOTS: SyncOnceCell<HashMap<(String, String, usize), Il2CppRoot>> = SyncOnceCell::new();
+static XREF_ROOTS: OnceLock<HashMap<(String, String, usize), Il2CppRoot>> = OnceLock::new();
 
 #[derive(Debug)]
 struct Il2CppRoot {

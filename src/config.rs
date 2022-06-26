@@ -4,11 +4,11 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::lazy::SyncLazy;
+use std::sync::LazyLock;
 use std::path::{Path, PathBuf};
 
-pub static CONFIG: SyncLazy<Config> = SyncLazy::new(|| exit_on_err(load_config()));
-pub static APPS: SyncLazy<HashMap<String, AppConfig>> = SyncLazy::new(|| exit_on_err(load_apps()));
+pub static CONFIG: LazyLock<Config> = LazyLock::new(|| exit_on_err(load_config()));
+pub static APPS: LazyLock<HashMap<String, AppConfig>> = LazyLock::new(|| exit_on_err(load_apps()));
 
 fn load_toml<P, T>(path: P) -> Result<T>
 where

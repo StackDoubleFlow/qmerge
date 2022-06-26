@@ -4,12 +4,12 @@ use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
 use std::ffi::CStr;
-use std::lazy::{SyncLazy, SyncOnceCell};
+use std::sync::{LazyLock, OnceLock};
 use std::mem::transmute;
 use std::os::raw::c_char;
 
 pub fn get_method_info_from_idx(idx: usize) -> &'static MethodInfo {
-    static FN_ADDR: SyncOnceCell<extern "C" fn(i32) -> *const MethodInfo> = SyncOnceCell::new();
+    static FN_ADDR: OnceLock<extern "C" fn(i32) -> *const MethodInfo> = OnceLock::new();
     let fn_addr = FN_ADDR.get_or_init(|| {
         let addr = xref::get_symbol(
             "_ZN6il2cpp2vm13MetadataCache38GetMethodInfoFromMethodDefinitionIndexEi",

@@ -8,16 +8,16 @@ use merge_data::{
 };
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::lazy::{SyncLazy, SyncOnceCell};
+use std::sync::{LazyLock, OnceLock};
 use std::sync::Mutex;
 use std::{ptr, slice, str};
 use tracing::debug;
 
-pub static MODS: SyncLazy<Mutex<HashMap<String, Box<Mod>>>> = SyncLazy::new(Default::default);
-pub(crate) static MOD_IMPORT_LUT: SyncOnceCell<ImportLut> = SyncOnceCell::new();
-pub static CODE_REGISTRATION: SyncOnceCell<&'static Il2CppCodeRegistration> = SyncOnceCell::new();
-pub static METADATA_REGISTRATION: SyncOnceCell<&'static Il2CppMetadataRegistration> =
-    SyncOnceCell::new();
+pub static MODS: LazyLock<Mutex<HashMap<String, Box<Mod>>>> = LazyLock::new(Default::default);
+pub(crate) static MOD_IMPORT_LUT: OnceLock<ImportLut> = OnceLock::new();
+pub static CODE_REGISTRATION: OnceLock<&'static Il2CppCodeRegistration> = OnceLock::new();
+pub static METADATA_REGISTRATION: OnceLock<&'static Il2CppMetadataRegistration> =
+    OnceLock::new();
 
 pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
     if (offset as i32) < 0 {
