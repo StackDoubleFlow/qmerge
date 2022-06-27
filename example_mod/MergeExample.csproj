@@ -1,7 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project>
+    <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk"/>
+
     <PropertyGroup>
         <TargetFramework>net452</TargetFramework>
     </PropertyGroup>
+
+    <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk"/>
 
     <ItemGroup>
         <Reference Include="UnityEngine.CoreModule">
@@ -15,7 +19,6 @@
       <None Remove="build\**" />
     </ItemGroup>
 
-    <!-- This doesn't work -->
     <PropertyGroup>
         <BuildDependsOn>$(BuildDependsOn);QMergeBuild</BuildDependsOn>
     </PropertyGroup>
