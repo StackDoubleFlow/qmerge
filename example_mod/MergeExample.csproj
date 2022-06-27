@@ -1,20 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net452</TargetFramework>
-        <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
-        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-        <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-        <NoStdLib>true</NoStdLib>
     </PropertyGroup>
 
     <ItemGroup>
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>build/Managed/UnityEngine.CoreModule.dll</HintPath>
-        </Reference>
-    </ItemGroup>
-    <ItemGroup>
-        <Reference Include="mscorlib">
-            <HintPath>build/Managed/mscorlib.dll</HintPath>
         </Reference>
     </ItemGroup>
 
@@ -24,7 +15,12 @@
       <None Remove="build\**" />
     </ItemGroup>
 
-    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <!-- This doesn't work -->
+    <PropertyGroup>
+        <BuildDependsOn>$(BuildDependsOn);QMergeBuild</BuildDependsOn>
+    </PropertyGroup>
+    
+    <Target Name="QMergeBuild" DependsOnTargets="Compile">
         <Exec Command="cargo rr -- build --regen-cpp $(OutputPath)" />
     </Target>
 </Project>
