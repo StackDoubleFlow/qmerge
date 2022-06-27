@@ -1,11 +1,7 @@
-<Project>
-    <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk"/>
-
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net452</TargetFramework>
     </PropertyGroup>
-
-    <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk"/>
 
     <ItemGroup>
         <Reference Include="UnityEngine.CoreModule">
@@ -18,12 +14,4 @@
       <EmbeddedResource Remove="build\**" />
       <None Remove="build\**" />
     </ItemGroup>
-
-    <PropertyGroup>
-        <BuildDependsOn>$(BuildDependsOn);QMergeBuild</BuildDependsOn>
-    </PropertyGroup>
-    
-    <Target Name="QMergeBuild" DependsOnTargets="Compile">
-        <Exec Command="cargo rr -- build --regen-cpp $(OutputPath)" />
-    </Target>
 </Project>
