@@ -83,6 +83,17 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
     if (referenceType == null)
         Console.WriteLine("Could not find reference type for " + type);
 
+    if (referenceType != null && type.CustomAttributes.Count != referenceType.CustomAttributes.Count)
+    {
+        foreach (var ca in referenceType.CustomAttributes)
+        {
+            if (ca.Constructor.FullName == "System.Void System.Reflection.DefaultMemberAttribute::.ctor(System.String)")
+            {
+                type.CustomAttributes.Add(new CustomAttribute((ICustomAttributeType) converter.Convert(ca.Constructor), ca.Signature));
+            }
+        }
+    }
+
     foreach (var method in type.Methods)
     {
         if (method.IsPInvokeImpl)
