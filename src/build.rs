@@ -277,6 +277,8 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         Command::new(mono_path)
             // Fix for System.ConsoleDriver type initializer
             .env("TERM", "xterm")
+            // Rider adds this which breaks things apparently
+            .env_remove("MONO_GAC_PREFIX")
             .arg(il2cpp_path)
             .arg("--convert-to-cpp")
             .arg("--directory=./build/Managed")

@@ -1,11 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net452</TargetFramework>
+        <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+        <NoStdLib>true</NoStdLib>
     </PropertyGroup>
 
     <ItemGroup>
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>build/Managed/UnityEngine.CoreModule.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+    <ItemGroup>
+        <Reference Include="mscorlib">
+            <HintPath>build/Managed/mscorlib.dll</HintPath>
         </Reference>
     </ItemGroup>
 
