@@ -1,5 +1,4 @@
 #![feature(once_cell, backtrace)]
-#![feature(native_link_modifiers_bundle)]
 #![feature(naked_functions)]
 #![feature(asm_sym)]
 
@@ -18,9 +17,9 @@ use merge_data::MergeModData;
 use metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use modloader::{ModLoader, MODS};
 use std::fs;
-use std::sync::LazyLock;
 use std::mem::transmute;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use tracing::{info, warn};
 
 fn get_mod_data_path() -> PathBuf {

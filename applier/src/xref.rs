@@ -8,8 +8,8 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
 use std::fs;
-use std::sync::{LazyLock, OnceLock};
 use std::mem::transmute;
+use std::sync::{LazyLock, OnceLock};
 use tracing::debug;
 
 static LIBIL2CPP: LazyLock<Library> = LazyLock::new(|| Library::open("libil2cpp.so").unwrap());

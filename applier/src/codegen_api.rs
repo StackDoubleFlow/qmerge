@@ -4,9 +4,9 @@ use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
 use std::ffi::CStr;
-use std::sync::{LazyLock, OnceLock};
 use std::mem::transmute;
 use std::os::raw::c_char;
+use std::sync::{LazyLock, OnceLock};
 
 pub fn get_method_info_from_idx(idx: usize) -> &'static MethodInfo {
     static FN_ADDR: OnceLock<extern "C" fn(i32) -> *const MethodInfo> = OnceLock::new();
@@ -90,7 +90,7 @@ pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsaf
 type P = *const ();
 
 #[proxy_codegen_api]
-fn _Z25il2cpp_codegen_object_newP11Il2CppClass(_: P);
+fn _Z25il2cpp_codegen_object_newP11Il2CppClass(_: P) -> P;
 
 #[proxy_codegen_api]
 fn _Z33il2cpp_codegen_runtime_class_initP11Il2CppClass(_: P);
@@ -99,13 +99,19 @@ fn _Z33il2cpp_codegen_runtime_class_initP11Il2CppClass(_: P);
 fn _Z32il2cpp_codegen_initialize_methodj(_: u32);
 
 #[proxy_codegen_api]
-fn _Z39il2cpp_codegen_class_from_type_internalPK10Il2CppType(_: P);
+fn _Z39il2cpp_codegen_class_from_type_internalPK10Il2CppType(_: P) -> P;
 
 #[proxy_codegen_api]
-fn _Z3BoxP11Il2CppClassPv(_: P, _: P);
+fn _Z3BoxP11Il2CppClassPv(_: P, _: P) -> P;
 
 #[proxy_codegen_api]
 fn _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass(_: P);
 
 #[proxy_codegen_api]
 fn _Z30il2cpp_codegen_raise_exceptionP11Exception_tP10MethodInfo(_: P, _: P);
+
+#[proxy_codegen_api("_ZN6il2cpp2vm10Reflection13GetTypeObjectEPK10Il2CppType")]
+fn _Z30il2cpp_codegen_type_get_objectPK10Il2CppType(_: P) -> P;
+
+#[proxy_codegen_api("_ZN6il2cpp2vm6String10NewWrapperEPKc")]
+fn _Z33il2cpp_codegen_string_new_wrapperPKc(_: P) -> P;

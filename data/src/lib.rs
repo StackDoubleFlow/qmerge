@@ -227,11 +227,18 @@ pub struct GenericClassInst {
 }
 
 #[derive(Encode, Decode, Debug)]
+pub struct CustomAttributeTypeRange {
+    pub token: u32,
+    pub types: Vec<TypeDescriptionIdx>,
+}
+
+#[derive(Encode, Decode, Debug)]
 pub struct CodeTableSizes {
     pub generic_adjustor_thunks: usize,
     pub generic_method_pointers: usize,
     pub invoker_pointers: usize,
     pub metadata_usages: usize,
+    pub attribute_generators: usize,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -250,6 +257,7 @@ pub struct MergeModData {
     pub added_type_defintions: Vec<AddedTypeDefinition>,
     pub added_usage_lists: Vec<Vec<AddedMetadataUsagePair>>,
     pub added_string_literals: Vec<String>,
+    pub added_ca_ranges: Vec<CustomAttributeTypeRange>,
 
     // Generics
     pub generic_instances: Vec<GenericInst>,

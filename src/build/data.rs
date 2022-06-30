@@ -11,10 +11,10 @@ use il2cpp_metadata_raw::{
 use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
-    AddedTypeDefinition, CodeTableSizes, EncodedMethodIndex, GenericClassInst,
-    GenericContainerOwner, GenericContext, GenericInst, GenericMethodFunctions, GenericMethodInst,
-    ImageDescription, MergeModData, MethodDescription, TypeDefDescription, TypeDescription,
-    TypeDescriptionData,
+    AddedTypeDefinition, CodeTableSizes, CustomAttributeTypeRange, EncodedMethodIndex,
+    GenericClassInst, GenericContainerOwner, GenericContext, GenericInst, GenericMethodFunctions,
+    GenericMethodInst, ImageDescription, MergeModData, MethodDescription, TypeDefDescription,
+    TypeDescription, TypeDescriptionData,
 };
 use std::collections::{HashMap, HashSet};
 use std::str;
@@ -79,6 +79,7 @@ struct ModDefinitions {
     added_assembly: AddedAssembly,
     added_image: AddedImage,
     added_type_defintions: Vec<AddedTypeDefinition>,
+    added_ca_ranges: Vec<CustomAttributeTypeRange>,
 }
 
 pub struct ModDataBuilder<'md, 'ty> {
@@ -292,10 +293,26 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             type_defs.push(self.add_mod_ty_def(type_def)?);
         }
 
+        let mut ca_ranges = Vec::new();
+        let attributes_range =
+            offset_len(image.custom_attribute_start, image.custom_attribute_count);
+        for attributes_info in &self.metadata.attributes_info[attributes_range] {
+            let mut types = Vec::new();
+            let types_range = offset_len(attributes_info.start, attributes_info.count);
+            for &ty_idx in &self.metadata.attribute_types[types_range] {
+                types.push(self.add_type(ty_idx)?)
+            }
+            ca_ranges.push(CustomAttributeTypeRange {
+                token: attributes_info.token,
+                types,
+            });
+        }
+
         self.mod_definitions = Some(ModDefinitions {
             added_assembly,
             added_image,
             added_type_defintions: type_defs,
+            added_ca_ranges: ca_ranges,
         });
 
         Ok(())
@@ -521,6 +538,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             added_assembly,
             added_image,
             added_type_defintions,
+            added_ca_ranges,
         } = self
             .mod_definitions
             .context("tried to build mod data without mod defintions")?;
@@ -537,6 +555,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             added_type_defintions,
             added_usage_lists: self.added_usage_lists,
             added_string_literals: self.added_string_literals,
+            added_ca_ranges,
 
             generic_instances: self.generic_insts,
             generic_method_insts: self.generic_methods,

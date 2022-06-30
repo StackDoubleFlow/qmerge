@@ -4,8 +4,8 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::sync::LazyLock;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| exit_on_err(load_config()));
 pub static APPS: LazyLock<HashMap<String, AppConfig>> = LazyLock::new(|| exit_on_err(load_apps()));

@@ -1,5 +1,6 @@
 mod clang;
 mod codegen;
+mod custom_attributes;
 mod data;
 mod function_usages;
 mod generics;
@@ -415,6 +416,18 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
     }
     function_usages.process_function_usages(mod_usages)?;
 
+    let ca_src = fs::read_to_string(cpp_path.join("Il2CppAttributes.cpp"));
+    if let Ok(ca_src) = &ca_src {
+        custom_attributes::transform(
+            ca_src,
+            &mut compile_command,
+            mod_image,
+            transformed_path,
+            &mut metadata_usage_names,
+            &mut function_usages,
+        )?;
+    }
+
     // Read generic sources
     let mut generic_source_names = Vec::new();
     get_numbered_paths(&mut generic_source_names, cpp_path, "GenericMethods");
@@ -438,14 +451,6 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         fs::read_to_string(cpp_path.join("Il2CppGenericMethodPointerTable.cpp"))?;
     let gen_method_ptr_table = generics::read_method_ptr_table(&gen_method_ptrs_src)?;
 
-    let (usage_fds, usages_len) = metadata_usage::transform(
-        &mut compile_command,
-        cpp_path,
-        transformed_path,
-        &mut data_builder,
-        &metadata_usage_names,
-    )?;
-
     data_builder.process_generic_funcs(&mut function_usages);
 
     let gen_adj_thunks = function_usages.write_generic_adj_thunk_table(
@@ -465,6 +470,14 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         &gen_adj_thunks,
     )?;
 
+    let (usage_fds, usages_len) = metadata_usage::transform(
+        &mut compile_command,
+        cpp_path,
+        transformed_path,
+        &mut data_builder,
+        &metadata_usage_names,
+    )?;
+
     function_usages.write_external(
         &mut compile_command,
         &mut data_builder,
@@ -476,6 +489,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         generic_method_pointers: function_usages.required_generic_funcs.len(),
         invoker_pointers: function_usages.required_invokers.len(),
         metadata_usages: usages_len,
+        attribute_generators: mod_image.custom_attribute_count as usize,
     };
     let mod_data = data_builder.build(code_table_sizes)?;
     // dbg!(&mod_data);

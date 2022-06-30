@@ -7,6 +7,9 @@
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>build/Managed/UnityEngine.CoreModule.dll</HintPath>
         </Reference>
+        <Reference Include="Main">
+            <HintPath>build/Managed/Main.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup>

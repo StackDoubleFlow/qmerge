@@ -26,7 +26,10 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Build { regen_cpp, input_dir } => build::build(regen_cpp, input_dir)?,
+        Commands::Build {
+            regen_cpp,
+            input_dir,
+        } => build::build(regen_cpp, input_dir)?,
         Commands::Upload => upload::upload()?,
     }
 
