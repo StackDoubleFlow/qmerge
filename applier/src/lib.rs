@@ -126,7 +126,7 @@ fn call_plugin_loads() -> Result<()> {
         let load_fn = MODS.lock().unwrap()[&id].load_fn;
         match load_fn {
             Some(load_fn) => unsafe { load_fn() },
-            None => warn!("Mod {} is missing a load function!", id),
+            None => warn!("Mod {} is missing an init function!", id),
         }
     }
     Ok(())

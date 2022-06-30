@@ -482,6 +482,25 @@ impl<'md> ModLoader<'md> {
     }
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
+        let image_name = self.add_str(&mod_data.added_image.name) as i32;
+        self.metadata.images.push(Il2CppImageDefinition {
+            nameIndex: image_name,
+            assemblyIndex: self.metadata.assemblies.len() as i32,
+
+            typeStart: self.metadata.type_definitions.len() as i32,
+            typeCount: mod_data.added_type_defintions.len() as u32,
+
+            exportedTypeStart: -1,
+            exportedTypeCount: 0,
+
+            // TODO: is this needed?
+            entryPointIndex: -1,
+            token: mod_data.added_image.token,
+
+            customAttributeStart: -1,
+            customAttributeCount: 0,
+        });
+
         let mut image_refs = Vec::new();
         'ii: for image_desc in &mod_data.image_descriptions {
             for (i, image) in self.metadata.images.iter().enumerate() {
@@ -565,7 +584,7 @@ impl<'md> ModLoader<'md> {
                 )?;
                 let ctx = ctx.with_method(container_idx);
 
-                if ty_def.name == "Example" && method.name == "Main" && method.parameters.is_empty()
+                if ty_def.name == "Plugin" && method.name == "Init" && method.parameters.is_empty()
                 {
                     let rid = 0x00FFFFFF & method.token;
                     unsafe {
@@ -864,33 +883,28 @@ impl<'md> ModLoader<'md> {
                 let ty_idx = ty_resolver.resolve(ty_idx, self, &Default::default())?;
                 self.metadata.attribute_types.push(ty_idx);
             }
-            self.metadata.attributes_info.push(Il2CppCustomAttributeTypeRange {
-                token: ca_range.token,
-                start: types_start as i32,
-                count: ca_range.types.len() as i32,
-            });
+            self.metadata
+                .attributes_info
+                .push(Il2CppCustomAttributeTypeRange {
+                    token: ca_range.token,
+                    start: types_start as i32,
+                    count: ca_range.types.len() as i32,
+                });
         }
 
-        let image_name = self.add_str(&mod_data.added_image.name) as i32;
-        self.metadata.images.push(Il2CppImageDefinition {
-            nameIndex: image_name,
-            assemblyIndex: self.metadata.assemblies.len() as i32,
+        let image = self.metadata.images.last_mut().unwrap();
+        image.customAttributeStart = ca_start as i32;
+        image.customAttributeCount = mod_data.added_ca_ranges.len() as u32;
 
-            typeStart: self.metadata.type_definitions.len() as i32,
-            typeCount: mod_data.added_type_defintions.len() as u32,
+        let ca_generators: *const CustomAttributesCacheGenerator =
+            unsafe { lib.symbol("g_AttributeGenerators")? };
+        for i in 0..mod_data.code_table_sizes.attribute_generators {
+            let generator = unsafe { ca_generators.add(i).read() };
+            self.code_registration
+                .custom_attribute_generators
+                .push(generator);
+        }
 
-            exportedTypeStart: -1,
-            exportedTypeCount: 0,
-
-            // TODO: is this needed?
-            entryPointIndex: -1,
-            token: mod_data.added_image.token,
-
-            // TODO: custom attributes
-            customAttributeStart: ca_start as i32,
-            customAttributeCount: mod_data.added_ca_ranges.len() as u32,
-        });
-        
         let aname = Il2CppAssemblyNameDefinition {
             nameIndex: self.add_str(&mod_data.added_assembly.name) as i32,
             cultureIndex: self.add_str(&mod_data.added_assembly.culture) as i32,

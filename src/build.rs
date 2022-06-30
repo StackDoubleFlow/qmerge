@@ -420,6 +420,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
     if let Ok(ca_src) = &ca_src {
         custom_attributes::transform(
             ca_src,
+            &mod_config.id,
             &mut compile_command,
             mod_image,
             transformed_path,

@@ -1,6 +1,7 @@
 use crate::build::parser::try_parse_call;
 
 use super::clang::CompileCommand;
+use super::convert_codegen_init_method;
 use super::function_usages::ModFunctionUsages;
 use super::parser::FnDecl;
 use anyhow::{Context, Result};
@@ -12,6 +13,7 @@ use std::path::Path;
 
 pub fn transform<'src>(
     src: &'src str,
+    mod_id: &str,
     compile_command: &mut CompileCommand,
     image: &Il2CppImageDefinition,
     transformed_path: &Path,
@@ -91,7 +93,10 @@ pub fn transform<'src>(
     }
 
     let new_path = transformed_path.join("Il2CppAttributes.cpp");
-    fs::write(&new_path, new_src)?;
+    fs::write(
+        &new_path,
+        convert_codegen_init_method(&new_src, mod_id, true)?,
+    )?;
     compile_command.add_source(new_path);
 
     Ok(())
