@@ -1,0 +1,4 @@
+app = "com.beatgames.beatsaber"
+name = "QMerge Core Library"
+version = "0.1.0"
+id = "QMergeCore"

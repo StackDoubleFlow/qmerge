@@ -1,0 +1,9 @@
+<Project>
+    <PropertyGroup>
+        <BuildDependsOn>$(BuildDependsOn);QMergeBuild</BuildDependsOn>
+    </PropertyGroup>
+    
+    <Target Name="QMergeBuild" DependsOnTargets="Compile">
+        <Exec Command="cargo rr -- build --regen-cpp $(OutputPath)" />
+    </Target>
+</Project>

@@ -1,4 +1,4 @@
-using QMerge.Hooks;
+using QMerge.Hooking;
 
 namespace MergeExample.Hooks
 {

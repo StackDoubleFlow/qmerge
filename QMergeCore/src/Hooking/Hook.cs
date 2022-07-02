@@ -1,6 +1,6 @@
 using System;
 
-namespace QMerge.Hooks
+namespace QMerge.Hooking
 {
     [AttributeUsage(AttributeTargets.Class)]
     public class Hook : Attribute

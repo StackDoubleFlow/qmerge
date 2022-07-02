@@ -1,8 +1,8 @@
-// From: https://docs.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1?view=net-6.0#examples
 using UnityEngine;
 using System;
-using System.Collections.Generic;
+using System.Reflection;
 using MergeExample.Hooks;
+using QMerge.Hooking;
 
 public class Plugin
 {
@@ -15,6 +15,9 @@ public class Plugin
         foreach (Attribute attr in attrs)  
         {
             Debug.Log(attr.GetType().FullName);
-        }  
+        }
+
+        var hookManager = new HookManager();
+        hookManager.HookAll(Assembly.GetExecutingAssembly());
     }
 }

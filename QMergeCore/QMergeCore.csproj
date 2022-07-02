@@ -10,9 +10,6 @@
         <Reference Include="Main">
             <HintPath>build/Managed/Main.dll</HintPath>
         </Reference>
-        <Reference Include="QMergeCore">
-            <HintPath>build/Managed/QMergeCore.dll</HintPath>
-        </Reference>
     </ItemGroup>
 
     <ItemGroup>
