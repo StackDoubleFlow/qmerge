@@ -1,5 +1,5 @@
+use super::{CODE_REGISTRATION, METADATA_REGISTRATION};
 use crate::il2cpp_types::*;
-use crate::modloader::{CODE_REGISTRATION, METADATA_REGISTRATION};
 use anyhow::{ensure, Result};
 use std::mem::size_of;
 use std::slice;

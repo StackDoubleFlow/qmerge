@@ -1,5 +1,8 @@
+use super::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
+use super::{ImportLut, Mod, ModRefs, MOD_IMPORT_LUT};
 use crate::il2cpp_types::*;
-use crate::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
+use crate::loader::{FixupEntry, ImportLutEntry, MODS};
+use crate::utils::{get_str, offset_len};
 use anyhow::{bail, Context, Result};
 use dlopen::raw::Library;
 use merge_data::{
@@ -8,35 +11,8 @@ use merge_data::{
 };
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::sync::{LazyLock, Mutex, OnceLock};
 use std::{ptr, slice, str};
 use tracing::debug;
-
-pub static MODS: LazyLock<Mutex<HashMap<String, Box<Mod>>>> = LazyLock::new(Default::default);
-pub(crate) static MOD_IMPORT_LUT: OnceLock<ImportLut> = OnceLock::new();
-pub static CODE_REGISTRATION: OnceLock<&'static Il2CppCodeRegistration> = OnceLock::new();
-pub static METADATA_REGISTRATION: OnceLock<&'static Il2CppMetadataRegistration> = OnceLock::new();
-
-pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
-    if (offset as i32) < 0 {
-        return 0..0;
-    }
-    offset as usize..offset as usize + len as usize
-}
-
-fn strlen(data: &[u8], offset: usize) -> usize {
-    let mut len = 0;
-    while data[offset + len] != 0 {
-        len += 1;
-    }
-    len
-}
-
-pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
-    let len = strlen(data, offset);
-    let str = str::from_utf8(&data[offset..offset + len])?;
-    Ok(str)
-}
 
 #[derive(Default, Clone, Copy)]
 struct TypeResolveContext {
@@ -287,50 +263,11 @@ impl<'a> TypeResolver<'a> {
     }
 }
 
-pub struct Mod {
-    pub lib: Library,
-    pub refs: ModRefs,
-    pub load_fn: Option<unsafe extern "C" fn()>,
-
-    pub extern_len: usize,
-    pub fixups: *mut FixupEntry,
-}
-
-unsafe impl Sync for Mod {}
-unsafe impl Send for Mod {}
-
-#[repr(transparent)]
-pub struct FixupEntry {
-    pub value: unsafe extern "C" fn(),
-}
-
 #[repr(C)]
 #[derive(Debug)]
 struct FuncLutEntry {
     pub fnptr: *const (),
     pub idx: usize,
-}
-
-#[derive(Default, Debug)]
-pub(crate) struct ImportLut {
-    pub ptrs: Vec<usize>,
-    pub data: Vec<ImportLutEntry>,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct ImportLutEntry {
-    pub mod_info: *const Mod,
-    pub fixup_index: usize,
-    pub ref_index: usize,
-}
-
-unsafe impl Sync for ImportLutEntry {}
-unsafe impl Send for ImportLutEntry {}
-
-pub struct ModRefs {
-    pub type_def_refs: Vec<usize>,
-    pub method_refs: Vec<usize>,
-    pub usage_list_offset: usize,
 }
 
 pub struct ModLoader<'md> {

@@ -1,6 +1,5 @@
-use crate::get_mod_data_path;
-use crate::metadata_builder::{CodeRegistrationBuilder, Metadata};
-use crate::modloader::{get_str, offset_len};
+use crate::loader::metadata_builder::{CodeRegistrationBuilder, Metadata};
+use crate::utils::{get_mod_data_path, get_str, offset_len};
 use anyhow::{anyhow, bail, Context, Result};
 use bad64::{Imm, Instruction, Op, Operand};
 use dlopen::raw::Library;

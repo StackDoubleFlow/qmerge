@@ -1,5 +1,5 @@
 use crate::il2cpp_types::{Il2CppImage, MethodInfo};
-use crate::modloader::{MODS, MOD_IMPORT_LUT};
+use crate::loader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
