@@ -403,7 +403,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
                 } else {
                     lines.next().unwrap();
                     if fn_def.inline {
-                        metadata_usage_names.insert(fn_def.name.to_string() + src_name);
+                        metadata_usage_names.insert(fn_def.name.trim_end_matches("_inline").to_string() + src_name);
                     } else {
                         metadata_usage_names.insert(fn_def.name.to_string());
                     }
