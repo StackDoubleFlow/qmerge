@@ -11,8 +11,8 @@ mod utils;
 mod xref;
 
 use anyhow::Result;
-use loader::MODS;
-use tracing::{info, warn};
+use loader::MOD_INIT_FNS;
+use tracing::info;
 
 #[no_mangle]
 pub extern "C" fn setup() {
@@ -22,15 +22,11 @@ pub extern "C" fn setup() {
 }
 
 fn call_plugin_loads() -> Result<()> {
-    let ids: Vec<String> = MODS.lock().unwrap().keys().cloned().collect();
-    for id in ids {
-        info!("Initializing mod {}", id);
-        let load_fn = MODS.lock().unwrap()[&id].load_fn;
-        match load_fn {
-            Some(load_fn) => unsafe { load_fn() },
-            None => warn!("Mod {} is missing an init function!", id),
-        }
+    info!("Calling mod initialization methods");
+    for init_fn in MOD_INIT_FNS.get().unwrap() {
+        unsafe { init_fn() }
     }
+    info!("Initializaton complete");
     Ok(())
 }
 

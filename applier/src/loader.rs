@@ -57,6 +57,7 @@ unsafe impl Sync for Mod {}
 unsafe impl Send for Mod {}
 
 pub static MODS: LazyLock<Mutex<HashMap<String, Box<Mod>>>> = LazyLock::new(Default::default);
+pub static MOD_INIT_FNS: OnceLock<Vec<unsafe extern "C" fn()>> = OnceLock::new();
 pub static MOD_IMPORT_LUT: OnceLock<ImportLut> = OnceLock::new();
 pub static CODE_REGISTRATION: OnceLock<&'static Il2CppCodeRegistration> = OnceLock::new();
 pub static METADATA_REGISTRATION: OnceLock<&'static Il2CppMetadataRegistration> = OnceLock::new();
@@ -144,9 +145,9 @@ fn find_load_ordering(mods: &[(String, MergeModData, Arc<Library>)]) -> Vec<usiz
     }
 
     if !sort.is_empty() {
-        for i in 0..mods.len() {
+        for (i, (id, _, _)) in mods.iter().enumerate() {
             if !ordering.contains(&i) {
-                error!("Could not load mod {} due to a dependency cycle", mods[i].0);
+                error!("Could not load mod {} due to a dependency cycle", id);
             }
         }
     }
@@ -182,12 +183,17 @@ fn load_mods(
     }
 
     let load_ordering = find_load_ordering(&mods);
+    let mut init_fns = Vec::new();
     let mut modloader = ModLoader::new(metadata, code_registration, metadata_registration)?;
     for i in load_ordering {
         let (id, mmd, lib) = &mods[i];
         info!("Loading mod {}", id);
         modloader.load_mod(id, mmd, lib.clone())?;
+        if let Some(load_fn) = MODS.lock().unwrap()[id].load_fn {
+            init_fns.push(load_fn);
+        }
     }
+    MOD_INIT_FNS.set(init_fns).unwrap();
 
     modloader.finish();
     Ok(())
