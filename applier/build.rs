@@ -45,7 +45,7 @@ fn main() {
         ))
         .header(
             libil2cpp_path
-                .join("il2cpp-class-internals.h")
+                .join("il2cpp-object-internals.h")
                 .to_str()
                 .unwrap(),
         )

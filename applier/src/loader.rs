@@ -2,6 +2,7 @@ mod applier;
 pub mod metadata_builder;
 
 use crate::il2cpp_types::{Il2CppCodeRegistration, Il2CppMetadataRegistration};
+use crate::natives::NATIVE_MAP;
 use crate::utils::{get_exec_path, get_mod_data_path};
 use crate::xref;
 use anyhow::{anyhow, Context, Result};
@@ -194,6 +195,24 @@ fn load_mods(
         }
     }
     MOD_INIT_FNS.set(init_fns).unwrap();
+
+    if let Some(core_image) = modloader.find_image("QMergeCore.dll")? {
+        info!("Hooking core natives");
+        let code_gen_module = modloader
+            .code_registration
+            .find_module("QMergeCore.dll")
+            .context("could not find core module")?;
+        for (name, fn_ptr) in NATIVE_MAP {
+            let method_idx = modloader
+                .find_method_by_name(core_image, name.0, name.1, name.2)?
+                .context("Could not resolve a core native")?;
+            let original_ptr = unsafe { code_gen_module.methodPointers.add(method_idx).read() };
+
+            unsafe {
+                Hook::new().install(transmute::<_, _>(original_ptr), *fn_ptr);
+            }
+        }
+    }
 
     modloader.finish();
     Ok(())

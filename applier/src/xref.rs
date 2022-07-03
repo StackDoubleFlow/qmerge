@@ -36,17 +36,7 @@ impl Il2CppRoot {
     ) -> Result<Self> {
         let rid = 0x00FFFFFF & token;
         let module = code_registration
-            .code_gen_modules
-            .iter()
-            .find_map(|&module| unsafe {
-                let module = &*module;
-                let name = CStr::from_ptr(module.moduleName).to_str().unwrap();
-                if name == image_name {
-                    Some(module)
-                } else {
-                    None
-                }
-            })
+            .find_module(image_name)
             .context("could not find module for xref trace")?;
         let method_pointer = unsafe {
             let ptr = module.methodPointers.add(rid as usize - 1);

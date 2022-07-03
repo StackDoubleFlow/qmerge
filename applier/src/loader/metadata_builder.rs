@@ -1,6 +1,7 @@
 use super::{CODE_REGISTRATION, METADATA_REGISTRATION};
 use crate::il2cpp_types::*;
 use anyhow::{ensure, Result};
+use std::ffi::CStr;
 use std::mem::size_of;
 use std::slice;
 
@@ -159,6 +160,18 @@ pub struct CodeRegistrationBuilder {
 }
 
 impl CodeRegistrationBuilder {
+    pub fn find_module(&self, image_name: &str) -> Option<&Il2CppCodeGenModule> {
+        self.code_gen_modules.iter().find_map(|&module| unsafe {
+            let module = &*module;
+            let name = CStr::from_ptr(module.moduleName).to_str().unwrap();
+            if name == image_name {
+                Some(module)
+            } else {
+                None
+            }
+        })
+    }
+
     pub unsafe fn from_raw(raw: *mut *const Il2CppCodeRegistration) -> Self {
         let cr = &**raw;
 

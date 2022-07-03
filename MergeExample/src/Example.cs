@@ -8,7 +8,7 @@ public class Plugin
 {
     public static void Init()
     {
-        Debug.Log("Hello world");
+        Debug.Log("Initializing MergeExample");
         Attribute[] attrs = Attribute.GetCustomAttributes(typeof(MainMenuViewControllerDidActivate), false);  // Reflection.  
   
         // Displaying output.  

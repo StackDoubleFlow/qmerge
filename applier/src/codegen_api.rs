@@ -1,4 +1,4 @@
-use crate::il2cpp_types::{Il2CppImage, MethodInfo};
+use crate::il2cpp_types::{Il2CppImage, Il2CppReflectionMethod, MethodInfo};
 use crate::loader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
 use anyhow::{ensure, Context, Result};
@@ -118,3 +118,8 @@ fn _Z33il2cpp_codegen_string_new_wrapperPKc(_: P) -> P;
 
 #[proxy_codegen_api]
 fn _Z37il2cpp_codegen_get_executing_assemblyPK10MethodInfo(_: P) -> P;
+
+// These methods aren't used in generated code, but are useful to have nevertheless
+
+// #[proxy_codegen_api]
+// fn _ZN6il2cpp2vm10Reflection9GetMethodEPK22Il2CppReflectionMethod(_method: *const Il2CppReflectionMethod) -> *const MethodInfo;

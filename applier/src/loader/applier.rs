@@ -273,7 +273,7 @@ struct FuncLutEntry {
 
 pub struct ModLoader<'md> {
     metadata: &'md mut Metadata,
-    code_registration: &'md mut CodeRegistrationBuilder,
+    pub code_registration: &'md mut CodeRegistrationBuilder,
     metadata_registration: &'md mut MetadataRegistrationBuilder,
     image_type_def_map: Vec<HashMap<(String, String), usize>>,
     method_spec_map: HashMap<Il2CppMethodSpec, usize>,
@@ -419,6 +419,39 @@ impl<'md> ModLoader<'md> {
         }
     }
 
+    pub fn find_image(&self, find_name: &str) -> Result<Option<usize>> {
+        for (i, image) in self.metadata.images.iter().enumerate() {
+            let name = self.get_str(image.nameIndex)?;
+            if name == find_name {
+                return Ok(Some(i));
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn find_method_by_name(
+        &self,
+        image: usize,
+        namespace: &str,
+        class: &str,
+        name: &str,
+    ) -> Result<Option<usize>> {
+        let type_def_idx =
+            self.image_type_def_map[image][&(namespace.to_string(), class.to_string())];
+        let type_def = &self.metadata.type_definitions[type_def_idx];
+
+        let methods_range = offset_len(type_def.methodStart, type_def.method_count as i32);
+        for (i, method) in self.metadata.methods[methods_range].iter().enumerate() {
+            let method_name = self.get_str(method.nameIndex)?;
+            if method_name == name {
+                return Ok(Some(i + type_def.methodStart as usize));
+            }
+        }
+
+        Ok(None)
+    }
+
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Arc<Library>) -> Result<()> {
         let image_name = self.add_str(&mod_data.added_image.name) as i32;
         self.metadata.images.push(Il2CppImageDefinition {
@@ -428,6 +461,7 @@ impl<'md> ModLoader<'md> {
             typeStart: self.metadata.type_definitions.len() as i32,
             typeCount: mod_data.added_type_defintions.len() as u32,
 
+            // TODO: is this needed?
             exportedTypeStart: -1,
             exportedTypeCount: 0,
 
@@ -435,21 +469,17 @@ impl<'md> ModLoader<'md> {
             entryPointIndex: -1,
             token: mod_data.added_image.token,
 
+            // These get modified later
             customAttributeStart: -1,
             customAttributeCount: 0,
         });
 
         let mut image_refs = Vec::new();
-        'ii: for image_desc in &mod_data.image_descriptions {
-            for (i, image) in self.metadata.images.iter().enumerate() {
-                let name = self.get_str(image.nameIndex)?;
-                if name == image_desc.name {
-                    image_refs.push(i);
-                    continue 'ii;
-                }
+        for image_desc in &mod_data.image_descriptions {
+            match self.find_image(&image_desc.name)? {
+                Some(idx) => image_refs.push(idx),
+                _ => bail!("could not resolve image reference: {}", image_desc.name),
             }
-
-            bail!("could not resolve image reference: {}", image_desc.name);
         }
 
         self.image_type_def_map
