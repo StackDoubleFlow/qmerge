@@ -3,6 +3,7 @@ use super::runtime_metadata::{
     GenericClass, GenericMethodSpec, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
     SrcGenericMethodFuncs,
 };
+use crate::config::Mod;
 use anyhow::{bail, Context, Result};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
@@ -532,7 +533,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         self.generic_funcs = Some(generic_funcs);
     }
 
-    pub fn build(mut self, code_table_sizes: CodeTableSizes) -> Result<MergeModData> {
+    pub fn build(mut self, config: &Mod, code_table_sizes: CodeTableSizes) -> Result<MergeModData> {
         self.fixup_types()?;
         let ModDefinitions {
             added_assembly,
@@ -549,6 +550,10 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             type_def_descriptions: self.type_definitions,
             type_descriptions: self.added_types,
             method_descriptions: self.methods,
+
+            dependencies: config.dependencies.clone(),
+            load_before: config.load_before.clone(),
+            load_after: config.load_after.clone(),
 
             added_assembly,
             added_image,

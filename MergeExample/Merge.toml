@@ -2,3 +2,4 @@ app = "com.beatgames.beatsaber"
 name = "Merge Example Mod"
 version = "0.1.0"
 id = "MergeExample"
+dependencies = ["QMergeCore"]

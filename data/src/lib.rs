@@ -251,6 +251,11 @@ pub struct MergeModData {
     pub type_descriptions: Vec<TypeDescription>,
     pub method_descriptions: Vec<MethodDescription>,
 
+    // Load ordering
+    pub dependencies: Vec<String>,
+    pub load_before: Vec<String>,
+    pub load_after: Vec<String>,
+
     // Added types
     pub added_assembly: AddedAssembly,
     pub added_image: AddedImage,

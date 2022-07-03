@@ -13,8 +13,9 @@ use metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBu
 use std::collections::HashMap;
 use std::fs;
 use std::mem::transmute;
-use std::sync::{LazyLock, Mutex, OnceLock};
-use tracing::info;
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use topological_sort::TopologicalSort;
+use tracing::{error, info};
 
 #[derive(Default, Debug)]
 pub struct ImportLut {
@@ -44,7 +45,7 @@ pub struct ModRefs {
 }
 
 pub struct Mod {
-    pub lib: Library,
+    pub lib: Arc<Library>,
     pub refs: ModRefs,
     pub load_fn: Option<unsafe extern "C" fn()>,
 
@@ -109,17 +110,62 @@ pub extern "C" fn load_metadata(file_name: *const u8) -> *const u8 {
     metadata.build()
 }
 
+fn find_load_ordering(mods: &[(String, MergeModData, Arc<Library>)]) -> Vec<usize> {
+    let name_map: HashMap<&String, usize> = mods
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _, _))| (id, i))
+        .collect();
+
+    let mut sort = TopologicalSort::new();
+
+    for (idx, (id, mmd, _)) in mods.iter().enumerate() {
+        for dep_id in &mmd.dependencies {
+            match name_map.get(dep_id) {
+                Some(&dep_idx) => sort.add_dependency(dep_idx, idx),
+                None => error!("Could not resolve dependency {} for mod {}", dep_id, id),
+            }
+        }
+        for before_id in &mmd.load_before {
+            if let Some(&before_idx) = name_map.get(before_id) {
+                sort.add_dependency(before_idx, idx);
+            }
+        }
+        for after_id in &mmd.load_after {
+            if let Some(&after_idx) = name_map.get(after_id) {
+                sort.add_dependency(idx, after_idx);
+            }
+        }
+    }
+
+    let mut ordering = Vec::new();
+    while let Some(next) = sort.pop() {
+        ordering.push(next);
+    }
+
+    if !sort.is_empty() {
+        for i in 0..mods.len() {
+            if !ordering.contains(&i) {
+                error!("Could not load mod {} due to a dependency cycle", mods[i].0);
+            }
+        }
+    }
+    ordering
+}
+
 fn load_mods(
     metadata: &mut Metadata,
     code_registration: &mut CodeRegistrationBuilder,
     metadata_registration: &mut MetadataRegistrationBuilder,
 ) -> Result<()> {
-    let mut modloader = ModLoader::new(metadata, code_registration, metadata_registration)?;
+    let mut mods = Vec::new();
 
     for entry in fs::read_dir(get_mod_data_path().join("Mods"))? {
         let mod_dir = entry?;
-        let id = mod_dir.file_name();
-        info!("Loading mod {:?}", id);
+        let id = mod_dir
+            .file_name()
+            .into_string()
+            .map_err(|str| anyhow!("{:?} is not a valid id", str))?;
 
         let mut file_path = mod_dir.path().join(&id);
         file_path.set_extension("mmd");
@@ -130,14 +176,17 @@ fn load_mods(
         let so_path = get_exec_path().join(file_path.file_name().unwrap());
         fs::copy(file_path, &so_path)?;
         let lib = Library::open(so_path).context("failed to open mod executable")?;
+        let lib = Arc::new(lib);
 
-        // let so = fs::read(&file_path).context("could not read mod executable")?;
-        modloader.load_mod(
-            &id.into_string()
-                .map_err(|str| anyhow!("{:?} is not a valid id", str))?,
-            &mmd,
-            lib,
-        )?;
+        mods.push((id, mmd, lib));
+    }
+
+    let load_ordering = find_load_ordering(&mods);
+    let mut modloader = ModLoader::new(metadata, code_registration, metadata_registration)?;
+    for i in load_ordering {
+        let (id, mmd, lib) = &mods[i];
+        info!("Loading mod {}", id);
+        modloader.load_mod(id, mmd, lib.clone())?;
     }
 
     modloader.finish();

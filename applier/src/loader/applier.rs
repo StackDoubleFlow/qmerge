@@ -11,6 +11,7 @@ use merge_data::{
 };
 use std::collections::HashMap;
 use std::ffi::c_void;
+use std::sync::Arc;
 use std::{ptr, slice, str};
 use tracing::debug;
 
@@ -418,7 +419,7 @@ impl<'md> ModLoader<'md> {
         }
     }
 
-    pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Library) -> Result<()> {
+    pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Arc<Library>) -> Result<()> {
         let image_name = self.add_str(&mod_data.added_image.name) as i32;
         self.metadata.images.push(Il2CppImageDefinition {
             nameIndex: image_name,

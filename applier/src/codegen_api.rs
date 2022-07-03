@@ -115,3 +115,6 @@ fn _Z30il2cpp_codegen_type_get_objectPK10Il2CppType(_: P) -> P;
 
 #[proxy_codegen_api("_ZN6il2cpp2vm6String10NewWrapperEPKc")]
 fn _Z33il2cpp_codegen_string_new_wrapperPKc(_: P) -> P;
+
+#[proxy_codegen_api]
+fn _Z37il2cpp_codegen_get_executing_assemblyPK10MethodInfo(_: P) -> P;

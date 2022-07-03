@@ -492,7 +492,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         metadata_usages: usages_len,
         attribute_generators: mod_image.custom_attribute_count as usize,
     };
-    let mod_data = data_builder.build(code_table_sizes)?;
+    let mod_data = data_builder.build(&mod_config, code_table_sizes)?;
     // dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(

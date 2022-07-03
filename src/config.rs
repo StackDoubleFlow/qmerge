@@ -61,6 +61,11 @@ pub struct Mod {
     pub name: String,
     pub version: String,
     pub id: String,
+    pub dependencies: Vec<String>,
+    #[serde(default)]
+    pub load_before: Vec<String>,
+    #[serde(default)]
+    pub load_after: Vec<String>,
 }
 
 impl Mod {
