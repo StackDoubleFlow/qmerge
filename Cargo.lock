@@ -433,6 +433,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "il2cpp_types"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -561,10 +568,9 @@ dependencies = [
  "anyhow",
  "applier_proc_macro",
  "bad64",
- "bindgen",
- "cc",
  "cfg-if",
  "dlopen",
+ "il2cpp_types",
  "inline_hook",
  "merge_data",
  "paranoid-android",

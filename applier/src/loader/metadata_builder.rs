@@ -1,6 +1,6 @@
 use super::{CODE_REGISTRATION, METADATA_REGISTRATION};
-use crate::il2cpp_types::*;
 use anyhow::{ensure, Result};
+use il2cpp_types::*;
 use std::ffi::CStr;
 use std::mem::size_of;
 use std::slice;

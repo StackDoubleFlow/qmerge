@@ -1,8 +1,8 @@
-use crate::il2cpp_types::{Il2CppImage, Il2CppReflectionMethod, MethodInfo};
 use crate::loader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
+use il2cpp_types::{Il2CppImage, Il2CppReflectionMethod, MethodInfo};
 use std::ffi::CStr;
 use std::mem::transmute;
 use std::os::raw::c_char;

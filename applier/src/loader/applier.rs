@@ -1,10 +1,10 @@
 use super::metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};
 use super::{ImportLut, Mod, ModRefs, MOD_IMPORT_LUT};
-use crate::il2cpp_types::*;
 use crate::loader::{FixupEntry, ImportLutEntry, MODS};
 use crate::utils::{get_str, offset_len};
 use anyhow::{bail, Context, Result};
 use dlopen::raw::Library;
+use il2cpp_types::*;
 use merge_data::{
     AddedGenericContainer, EncodedMethodIndex, GenericClassInst, GenericContainerOwner,
     GenericInst, MergeModData, TypeDescription, TypeDescriptionData,

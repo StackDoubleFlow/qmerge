@@ -1,13 +1,13 @@
 mod applier;
 pub mod metadata_builder;
 
-use crate::il2cpp_types::{Il2CppCodeRegistration, Il2CppMetadataRegistration};
 use crate::natives::NATIVE_MAP;
 use crate::utils::{get_exec_path, get_mod_data_path};
 use crate::xref;
 use anyhow::{anyhow, Context, Result};
 use applier::ModLoader;
 use dlopen::raw::Library;
+use il2cpp_types::{Il2CppCodeRegistration, Il2CppMetadataRegistration};
 use inline_hook::Hook;
 use merge_data::MergeModData;
 use metadata_builder::{CodeRegistrationBuilder, Metadata, MetadataRegistrationBuilder};

@@ -1,5 +1,5 @@
 [workspace]
-members = ["data", "applier"]
+members = ["data", "applier", "applier/il2cpp_types"]
 
 [package]
 name = "qmerge"

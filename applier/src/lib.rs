@@ -4,7 +4,6 @@
 
 mod asm;
 mod codegen_api;
-pub mod il2cpp_types;
 mod loader;
 mod natives;
 mod setup;
