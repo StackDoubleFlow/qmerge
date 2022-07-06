@@ -59,5 +59,4 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings_24_5.rs"))
         .expect("Couldn't write bindings!");
-    println!("cargo:rustc-link-arg=-Wl,-soname,libmerge_applier.so")
 }
