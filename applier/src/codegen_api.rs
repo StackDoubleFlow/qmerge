@@ -2,8 +2,9 @@ use crate::loader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
-use il2cpp_types::{Il2CppImage, Il2CppReflectionMethod, MethodInfo};
-use std::ffi::CStr;
+use il2cpp_types::{Il2CppImage, TypeDefinitionIndex, MethodInfo, Il2CppClass, Il2CppAssembly};
+use tracing::info;
+use std::ffi::{CStr, CString};
 use std::mem::transmute;
 use std::os::raw::c_char;
 use std::sync::{LazyLock, OnceLock};
@@ -119,7 +120,20 @@ fn _Z33il2cpp_codegen_string_new_wrapperPKc(_: P) -> P;
 #[proxy_codegen_api]
 fn _Z37il2cpp_codegen_get_executing_assemblyPK10MethodInfo(_: P) -> P;
 
+#[proxy_codegen_api]
+fn _Z48il2cpp_codegen_get_array_type_mismatch_exceptionv() -> P;
+
+#[proxy_codegen_api]
+fn _Z10SZArrayNewP11Il2CppClassj(_: P, _: P) -> P;
+
+#[proxy_codegen_api]
+fn _Z6IsInstP12Il2CppObjectP11Il2CppClass(_: P, _: u32) -> P;
+
+// TODO: Maybe log and panic here instead of proxying call?
+#[proxy_codegen_api("_ZN6il2cpp2vm9Exception25GetMissingMethodExceptionEPKc")]
+fn _Z43il2cpp_codegen_get_missing_method_exceptionPKc(_: P) -> P;
+
 // These methods aren't used in generated code, but are useful to have nevertheless
 
-// #[proxy_codegen_api]
-// fn _ZN6il2cpp2vm10Reflection9GetMethodEPK22Il2CppReflectionMethod(_method: *const Il2CppReflectionMethod) -> *const MethodInfo;
+#[proxy_codegen_api]
+fn _ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi(index: TypeDefinitionIndex) -> *const Il2CppClass;
