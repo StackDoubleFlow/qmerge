@@ -452,8 +452,6 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         fs::read_to_string(cpp_path.join("Il2CppGenericMethodPointerTable.cpp"))?;
     let gen_method_ptr_table = generics::read_method_ptr_table(&gen_method_ptrs_src)?;
 
-    data_builder.process_generic_funcs(&mut function_usages);
-
     let gen_adj_thunks = function_usages.write_generic_adj_thunk_table(
         &mut compile_command,
         transformed_path,
@@ -492,6 +490,8 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
         metadata_usages: usages_len,
         attribute_generators: mod_image.custom_attribute_count as usize,
     };
+
+    data_builder.process_generic_funcs(&mut function_usages);
     let mod_data = data_builder.build(&mod_config, code_table_sizes)?;
     // dbg!(&mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
