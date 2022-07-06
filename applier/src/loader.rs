@@ -207,7 +207,8 @@ fn load_mods(
                 .find_method_token_by_name(core_image, name.0, name.1, name.2)?
                 .context("Could not resolve a core native")?;
             let rid = token & 0x00FFFFFF;
-            let original_ptr = unsafe { code_gen_module.methodPointers.add(rid as usize - 1).read() };
+            let original_ptr =
+                unsafe { code_gen_module.methodPointers.add(rid as usize - 1).read() };
 
             unsafe {
                 Hook::new().install(transmute::<_, _>(original_ptr), *fn_ptr);

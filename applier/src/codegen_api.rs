@@ -2,12 +2,12 @@ use crate::loader::{MODS, MOD_IMPORT_LUT};
 use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
-use il2cpp_types::{Il2CppImage, TypeDefinitionIndex, MethodInfo, Il2CppClass, Il2CppAssembly};
-use tracing::info;
+use il2cpp_types::{Il2CppAssembly, Il2CppClass, Il2CppImage, MethodInfo, TypeDefinitionIndex};
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
 use std::os::raw::c_char;
 use std::sync::{LazyLock, OnceLock};
+use tracing::info;
 
 pub fn get_method_info_from_idx(idx: usize) -> &'static MethodInfo {
     static FN_ADDR: OnceLock<extern "C" fn(i32) -> *const MethodInfo> = OnceLock::new();
@@ -136,4 +136,6 @@ fn _Z43il2cpp_codegen_get_missing_method_exceptionPKc(_: P) -> P;
 // These methods aren't used in generated code, but are useful to have nevertheless
 
 #[proxy_codegen_api]
-fn _ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi(index: TypeDefinitionIndex) -> *const Il2CppClass;
+fn _ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi(
+    index: TypeDefinitionIndex,
+) -> *const Il2CppClass;

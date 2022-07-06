@@ -1,9 +1,13 @@
-use std::{slice, mem::size_of};
-use il2cpp_types::*;
 use crate::codegen_api::_ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi;
+use il2cpp_types::*;
+use std::mem::size_of;
+use std::slice;
 
 fn is_fp_ty(ty: Il2CppTypeEnum) -> bool {
-    matches!(ty, Il2CppTypeEnum_IL2CPP_TYPE_R4 | Il2CppTypeEnum_IL2CPP_TYPE_R8)
+    matches!(
+        ty,
+        Il2CppTypeEnum_IL2CPP_TYPE_R4 | Il2CppTypeEnum_IL2CPP_TYPE_R8
+    )
 }
 
 fn is_composite_ty(ty: Il2CppTypeEnum) -> bool {
@@ -11,34 +15,36 @@ fn is_composite_ty(ty: Il2CppTypeEnum) -> bool {
 }
 
 fn is_integral_ty(ty: Il2CppTypeEnum) -> bool {
-    matches!(ty, 
+    matches!(
+        ty,
         Il2CppTypeEnum_IL2CPP_TYPE_BOOLEAN
-        | Il2CppTypeEnum_IL2CPP_TYPE_CHAR
-        | Il2CppTypeEnum_IL2CPP_TYPE_I1
-        | Il2CppTypeEnum_IL2CPP_TYPE_U1
-        | Il2CppTypeEnum_IL2CPP_TYPE_I2
-        | Il2CppTypeEnum_IL2CPP_TYPE_U2
-        | Il2CppTypeEnum_IL2CPP_TYPE_I4
-        | Il2CppTypeEnum_IL2CPP_TYPE_U4
-        | Il2CppTypeEnum_IL2CPP_TYPE_I8
-        | Il2CppTypeEnum_IL2CPP_TYPE_U8
-        | Il2CppTypeEnum_IL2CPP_TYPE_I
-        | Il2CppTypeEnum_IL2CPP_TYPE_U
-        | Il2CppTypeEnum_IL2CPP_TYPE_ENUM
+            | Il2CppTypeEnum_IL2CPP_TYPE_CHAR
+            | Il2CppTypeEnum_IL2CPP_TYPE_I1
+            | Il2CppTypeEnum_IL2CPP_TYPE_U1
+            | Il2CppTypeEnum_IL2CPP_TYPE_I2
+            | Il2CppTypeEnum_IL2CPP_TYPE_U2
+            | Il2CppTypeEnum_IL2CPP_TYPE_I4
+            | Il2CppTypeEnum_IL2CPP_TYPE_U4
+            | Il2CppTypeEnum_IL2CPP_TYPE_I8
+            | Il2CppTypeEnum_IL2CPP_TYPE_U8
+            | Il2CppTypeEnum_IL2CPP_TYPE_I
+            | Il2CppTypeEnum_IL2CPP_TYPE_U
+            | Il2CppTypeEnum_IL2CPP_TYPE_ENUM
     )
 }
 
 fn is_pointer_ty(ty: Il2CppTypeEnum) -> bool {
-    matches!(ty,
+    matches!(
+        ty,
         Il2CppTypeEnum_IL2CPP_TYPE_PTR
-        | Il2CppTypeEnum_IL2CPP_TYPE_FNPTR
-        | Il2CppTypeEnum_IL2CPP_TYPE_STRING
-        | Il2CppTypeEnum_IL2CPP_TYPE_SZARRAY
-        | Il2CppTypeEnum_IL2CPP_TYPE_ARRAY
-        | Il2CppTypeEnum_IL2CPP_TYPE_CLASS
-        | Il2CppTypeEnum_IL2CPP_TYPE_OBJECT
-        | Il2CppTypeEnum_IL2CPP_TYPE_VAR
-        | Il2CppTypeEnum_IL2CPP_TYPE_MVAR
+            | Il2CppTypeEnum_IL2CPP_TYPE_FNPTR
+            | Il2CppTypeEnum_IL2CPP_TYPE_STRING
+            | Il2CppTypeEnum_IL2CPP_TYPE_SZARRAY
+            | Il2CppTypeEnum_IL2CPP_TYPE_ARRAY
+            | Il2CppTypeEnum_IL2CPP_TYPE_CLASS
+            | Il2CppTypeEnum_IL2CPP_TYPE_OBJECT
+            | Il2CppTypeEnum_IL2CPP_TYPE_VAR
+            | Il2CppTypeEnum_IL2CPP_TYPE_MVAR
     )
 }
 
@@ -68,8 +74,7 @@ fn get_ty_size(ty: &Il2CppType) -> usize {
         Il2CppTypeEnum_IL2CPP_TYPE_I8
         | Il2CppTypeEnum_IL2CPP_TYPE_U8
         | Il2CppTypeEnum_IL2CPP_TYPE_R8 => 8,
-        Il2CppTypeEnum_IL2CPP_TYPE_I
-        | Il2CppTypeEnum_IL2CPP_TYPE_U => size_of::<usize>(),
+        Il2CppTypeEnum_IL2CPP_TYPE_I | Il2CppTypeEnum_IL2CPP_TYPE_U => size_of::<usize>(),
         Il2CppTypeEnum_IL2CPP_TYPE_PTR
         | Il2CppTypeEnum_IL2CPP_TYPE_FNPTR
         | Il2CppTypeEnum_IL2CPP_TYPE_STRING
@@ -80,10 +85,9 @@ fn get_ty_size(ty: &Il2CppType) -> usize {
         | Il2CppTypeEnum_IL2CPP_TYPE_VAR
         | Il2CppTypeEnum_IL2CPP_TYPE_MVAR => size_of::<*const ()>(),
         Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE => get_ty_class(ty).actualSize as usize,
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
-
 
 // Returns the number of registers the fields would consume
 fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
@@ -102,11 +106,15 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
         }
         let field_ty = unsafe { (*field.type_).type_() };
         match base_ty {
-            None => if is_fp_ty(field_ty) {
-                base_ty = Some(field_ty);
+            None => {
+                if is_fp_ty(field_ty) {
+                    base_ty = Some(field_ty);
+                }
             }
-            Some(base_ty) => if field_ty != base_ty {
-                return None;
+            Some(base_ty) => {
+                if field_ty != base_ty {
+                    return None;
+                }
             }
         }
         num += 1;
@@ -147,7 +155,14 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
     // A.4: next stacked arg addr
     let mut nsaa = 0;
 
-    let mut args: Vec<_> = types.iter().map(|&ty| Arg { ty, ptr: false, size: get_ty_size(ty) }).collect();
+    let mut args: Vec<_> = types
+        .iter()
+        .map(|&ty| Arg {
+            ty,
+            ptr: false,
+            size: get_ty_size(ty),
+        })
+        .collect();
 
     // Stage B
     for arg in &mut args {
@@ -179,7 +194,7 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
         } else {
             ty.type_()
         };
-        
+
         // C.1
         if is_fp_ty(ty_enum) && nsrn < 8 {
             storage.push(ParameterStorage::VectorReg(nsrn));

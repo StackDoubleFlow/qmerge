@@ -2,6 +2,7 @@
 #![feature(naked_functions)]
 #![feature(asm_sym)]
 
+mod abi;
 mod asm;
 mod codegen_api;
 mod loader;
@@ -9,7 +10,6 @@ mod natives;
 mod setup;
 mod utils;
 mod xref;
-mod abi;
 
 use anyhow::Result;
 use loader::MOD_INIT_FNS;

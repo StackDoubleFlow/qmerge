@@ -87,7 +87,8 @@ impl<'a> TypeResolver<'a> {
             },
             TypeDescriptionData::TypeIdx(idx) => Il2CppType__bindgen_ty_1 {
                 type_: {
-                    let (ty_idx, ty_has_generic_param) = self.resolve_internal(idx, loader, ctx, cache_generics)?;
+                    let (ty_idx, ty_has_generic_param) =
+                        self.resolve_internal(idx, loader, ctx, cache_generics)?;
                     has_generic_param = ty_has_generic_param;
                     loader.metadata_registration.types[ty_idx as usize]
                 },

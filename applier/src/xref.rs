@@ -88,9 +88,19 @@ pub fn initialize_roots(
             let class = get_str(&metadata.string, type_def.nameIndex as usize)?;
             for method in &metadata.methods[method_range] {
                 let method_name = get_str(&metadata.string, method.nameIndex as usize)?;
-                if required_roots.take(&(namespace, class, method_name)).is_some() {
+                if required_roots
+                    .take(&(namespace, class, method_name))
+                    .is_some()
+                {
                     let root = Il2CppRoot::get(method.token, image_name, code_registration)?;
-                    roots.insert((namespace.to_string(), class.to_string(), method_name.to_string()), root);
+                    roots.insert(
+                        (
+                            namespace.to_string(),
+                            class.to_string(),
+                            method_name.to_string(),
+                        ),
+                        root,
+                    );
                 }
             }
         }
@@ -128,7 +138,11 @@ fn get_root(namespace: &str, class: &str, method_name: &str) -> Result<&'static 
     XREF_ROOTS
         .get()
         .context("il2cpp xref roots has not been initialized yet")?
-        .get(&(namespace.to_string(), class.to_string(), method_name.to_string()))
+        .get(&(
+            namespace.to_string(),
+            class.to_string(),
+            method_name.to_string(),
+        ))
         .context("could not find root")
 }
 
