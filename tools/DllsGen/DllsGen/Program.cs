@@ -10,12 +10,13 @@ using DllsGen;
 
 // TODO: cli interface thing
 var publicizeMethods = false;
-var managedPath = "/home/stack/ledump/QuestModding/qmerge/example_mod/build/Managed/";
+var managedPath = "/home/stack/ledump/QuestModding/qmerge/MergeExample/build/Managed/";
 var inputPath = "/home/stack/ledump/QuestModding/qmerge/test_analysis/cpp2il_out";
 
 var referencePaths = new string[]
 {
     "/home/stack/ledump/UnityEditor/2019.4.28f1/Editor/Data/MonoBleedingEdge/lib/mono/unityaot/",
+    "/home/stack/ledump/UnityEditor/2019.4.28f1/Editor/Data/PlaybackEngines/AndroidPlayer/Variations/il2cpp/Managed/",
     "/home/stack/.local/share/Steam/steamapps/common/Beat Saber/Beat Saber_Data/Managed/",
 };
 
@@ -127,8 +128,11 @@ static void ProcessType(TypeDefinition type, ModuleDefinition module, ModuleRefe
                     }
                 }
             }
-            if (referenceMethod?.CilMethodBody == null) continue;
-        
+
+            if (referenceMethod == null) continue;
+            method.ImplAttributes = referenceMethod.ImplAttributes;
+            if (referenceMethod.CilMethodBody == null) continue;
+
             var body = new CilMethodBody(method);
             var referenceBody = referenceMethod.CilMethodBody;
 
