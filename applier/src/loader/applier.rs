@@ -68,7 +68,8 @@ impl<'a> TypeResolver<'a> {
         }
     }
 
-    fn resolve(
+    /// method return types and parameters are checked with different contexts, so we can't cache it
+    fn resolve_uncached(
         &mut self,
         idx: usize,
         loader: &mut ModLoader,
@@ -85,7 +86,7 @@ impl<'a> TypeResolver<'a> {
             },
             TypeDescriptionData::TypeIdx(idx) => Il2CppType__bindgen_ty_1 {
                 type_: {
-                    let ty_idx = self.resolve(idx, loader, ctx)?;
+                    let ty_idx = self.resolve_uncached(idx, loader, ctx)?;
                     loader.metadata_registration.types[ty_idx as usize]
                 },
             },
@@ -132,11 +133,20 @@ impl<'a> TypeResolver<'a> {
                 };
                 let ptr = Box::leak(Box::new(ty)) as _;
                 let idx = loader.metadata_registration.types.len();
-                // added_types.push(ptr as *mut Il2CppType);
                 loader.metadata_registration.types.push(ptr);
                 idx
             }
         };
+        Ok(ty_idx as i32)
+    }
+
+    fn resolve(
+        &mut self,
+        idx: usize,
+        loader: &mut ModLoader,
+        ctx: &TypeResolveContext,
+    ) -> Result<i32> {
+        let ty_idx = self.resolve_uncached(idx, loader, ctx)?;
         self.refs[idx] = Some(ty_idx as i32);
         Ok(ty_idx as i32)
     }
@@ -686,7 +696,7 @@ impl<'md> ModLoader<'md> {
                 } else {
                     ctx
                 };
-                let return_ty = ty_resolver.resolve(method.return_ty, self, &ctx)?;
+                let return_ty = ty_resolver.resolve_uncached(method.return_ty, self, &ctx)?;
 
                 if self.get_str(name_idx)? != method.name
                     || tm_return_ty != return_ty
@@ -697,7 +707,7 @@ impl<'md> ModLoader<'md> {
 
                 let mut params_match = true;
                 for (&param, tm_param_idx) in method.params.iter().zip(params_range) {
-                    let param = ty_resolver.resolve(param, self, &ctx)?;
+                    let param = ty_resolver.resolve_uncached(param, self, &ctx)?;
                     if param != self.metadata.parameters[tm_param_idx].typeIndex {
                         params_match = false;
                         break;
