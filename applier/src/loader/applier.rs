@@ -68,17 +68,18 @@ impl<'a> TypeResolver<'a> {
         }
     }
 
-    /// method return types and parameters are checked with different contexts, so we can't cache it
-    fn resolve_uncached(
+    fn resolve_internal(
         &mut self,
         idx: usize,
         loader: &mut ModLoader,
         ctx: &TypeResolveContext,
-    ) -> Result<i32> {
+        cache_generics: bool,
+    ) -> Result<(i32, bool)> {
         if let Some(idx) = self.refs[idx] {
-            return Ok(idx);
+            return Ok((idx, true));
         }
 
+        let mut has_generic_param = false;
         let desc = &self.descs[idx];
         let data = match desc.data {
             TypeDescriptionData::TypeDefIdx(idx) => Il2CppType__bindgen_ty_1 {
@@ -86,7 +87,8 @@ impl<'a> TypeResolver<'a> {
             },
             TypeDescriptionData::TypeIdx(idx) => Il2CppType__bindgen_ty_1 {
                 type_: {
-                    let ty_idx = self.resolve_uncached(idx, loader, ctx)?;
+                    let (ty_idx, ty_has_generic_param) = self.resolve_internal(idx, loader, ctx, cache_generics)?;
+                    has_generic_param = ty_has_generic_param;
                     loader.metadata_registration.types[ty_idx as usize]
                 },
             },
@@ -99,6 +101,7 @@ impl<'a> TypeResolver<'a> {
                 let container_idx =
                     container_idx.context("failed to resolve generic param in this context")?;
                 let container = &loader.metadata.generic_containers[container_idx];
+                has_generic_param = true;
                 Il2CppType__bindgen_ty_1 {
                     genericParameterIndex: container.genericParameterStart + idx as i32,
                 }
@@ -137,7 +140,21 @@ impl<'a> TypeResolver<'a> {
                 idx
             }
         };
-        Ok(ty_idx as i32)
+        if cache_generics || !has_generic_param {
+            self.refs[idx] = Some(ty_idx as i32);
+        }
+        Ok((ty_idx as i32, has_generic_param))
+    }
+
+    /// method return types and parameters are checked with different contexts, so we can't cache it
+    fn resolve_uncached(
+        &mut self,
+        idx: usize,
+        loader: &mut ModLoader,
+        ctx: &TypeResolveContext,
+    ) -> Result<i32> {
+        let (ty_idx, _) = self.resolve_internal(idx, loader, ctx, false)?;
+        Ok(ty_idx)
     }
 
     fn resolve(
@@ -146,9 +163,8 @@ impl<'a> TypeResolver<'a> {
         loader: &mut ModLoader,
         ctx: &TypeResolveContext,
     ) -> Result<i32> {
-        let ty_idx = self.resolve_uncached(idx, loader, ctx)?;
-        self.refs[idx] = Some(ty_idx as i32);
-        Ok(ty_idx as i32)
+        let (ty_idx, _) = self.resolve_internal(idx, loader, ctx, true)?;
+        Ok(ty_idx)
     }
 
     fn resolve_generic_class(
