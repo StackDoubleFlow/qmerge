@@ -61,8 +61,10 @@ impl<'a> CompileCommand<'a> {
         command
             .args(&[
                 "-fpic",
+                "-fno-inline-functions",
                 "-Wno-missing-declarations",
                 "-Wno-invalid-offsetof",
+                "-O2",
                 "-c",
             ])
             .arg(path);
