@@ -203,10 +203,11 @@ fn load_mods(
             .find_module("QMergeCore.dll")
             .context("could not find core module")?;
         for (name, fn_ptr) in NATIVE_MAP {
-            let method_idx = modloader
-                .find_method_by_name(core_image, name.0, name.1, name.2)?
+            let token = modloader
+                .find_method_token_by_name(core_image, name.0, name.1, name.2)?
                 .context("Could not resolve a core native")?;
-            let original_ptr = unsafe { code_gen_module.methodPointers.add(method_idx).read() };
+            let rid = token & 0x00FFFFFF;
+            let original_ptr = unsafe { code_gen_module.methodPointers.add(rid as usize - 1).read() };
 
             unsafe {
                 Hook::new().install(transmute::<_, _>(original_ptr), *fn_ptr);
