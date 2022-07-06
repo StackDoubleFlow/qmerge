@@ -430,13 +430,13 @@ impl<'md> ModLoader<'md> {
         Ok(None)
     }
 
-    pub fn find_method_by_name(
+    pub fn find_method_token_by_name(
         &self,
         image: usize,
         namespace: &str,
         class: &str,
         name: &str,
-    ) -> Result<Option<usize>> {
+    ) -> Result<Option<u32>> {
         let type_def_idx =
             self.image_type_def_map[image][&(namespace.to_string(), class.to_string())];
         let type_def = &self.metadata.type_definitions[type_def_idx];
@@ -445,7 +445,7 @@ impl<'md> ModLoader<'md> {
         for (i, method) in self.metadata.methods[methods_range].iter().enumerate() {
             let method_name = self.get_str(method.nameIndex)?;
             if method_name == name {
-                return Ok(Some(i + type_def.methodStart as usize));
+                return Ok(Some(method.token));
             }
         }
 
