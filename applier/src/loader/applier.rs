@@ -452,7 +452,7 @@ impl<'md> ModLoader<'md> {
         let type_def = &self.metadata.type_definitions[type_def_idx];
 
         let methods_range = offset_len(type_def.methodStart, type_def.method_count as i32);
-        for (i, method) in self.metadata.methods[methods_range].iter().enumerate() {
+        for method in &self.metadata.methods[methods_range] {
             let method_name = self.get_str(method.nameIndex)?;
             if method_name == name {
                 return Ok(Some(method.token));
