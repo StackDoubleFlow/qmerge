@@ -11,4 +11,5 @@ unsafe fn create_postfix_hook(
     target_obj: *const Il2CppReflectionMethod,
 ) {
     let original_method = &*(*original_obj).method;
+    tracing::debug!("in postfix hook thing");
 }

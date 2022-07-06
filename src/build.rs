@@ -493,7 +493,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
 
     data_builder.process_generic_funcs(&mut function_usages);
     let mod_data = data_builder.build(&mod_config, code_table_sizes)?;
-    // dbg!(&mod_data);
+    // println!("{:#?}", &mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(
         &mut compile_command,

@@ -17,7 +17,7 @@ namespace QMerge.Hooking
 
         private void ProcessType(Type type)
         {
-            foreach (var customAttribute in type.GetCustomAttributes())
+            foreach (var customAttribute in type.GetCustomAttributes(false))
             {
                 if (customAttribute is Hook hook)
                 {

@@ -7,8 +7,14 @@
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>build/Managed/UnityEngine.CoreModule.dll</HintPath>
         </Reference>
+        <Reference Include="UnityEngine.UI">
+            <HintPath>build/Managed/UnityEngine.UI.dll</HintPath>
+        </Reference>
         <Reference Include="Main">
             <HintPath>build/Managed/Main.dll</HintPath>
+        </Reference>
+        <Reference Include="Unity.TextMeshPro">
+            <HintPath>build/Managed/Unity.TextMeshPro.dll</HintPath>
         </Reference>
         <Reference Include="QMergeCore">
             <HintPath>build/Managed/QMergeCore.dll</HintPath>
