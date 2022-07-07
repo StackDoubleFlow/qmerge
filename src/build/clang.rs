@@ -96,13 +96,20 @@ impl<'a> CompileCommand<'a> {
             object_files.push(self.compile_source(source_file)?);
         }
 
+        let applier_path = PathBuf::from("../target/aarch64-linux-android/release/libmerge_applier.so");
+        let applier_path = if applier_path.exists() {
+            applier_path
+        } else {
+            PathBuf::from("./build/bin/libs/libmerge_applier.so")
+        };
+
         let mut command = self.base_command(true);
         command
             .args(&["-shared", "-static-libstdc++", "-Wl,--no-undefined"])
             .arg("-o")
             .arg(&self.output_path)
             // TODO: Get path to applier binary
-            .arg("../target/aarch64-linux-android/release/libmerge_applier.so")
+            .arg(applier_path)
             .args(&object_files);
         // dbg!(&command);
         let status = command.status().context("failed to execute link command")?;
