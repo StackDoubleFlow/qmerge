@@ -8,13 +8,13 @@ namespace MergeExample
     {
         void Start()
         {
-            InvokeRepeating(nameof(DoPinkCute), 2.0f, 3.0f);
+            InvokeRepeating(nameof(PerformPinkCute), 2.0f, 3.0f);
         }
 
-        void DoPinkCute()
+        void PerformPinkCute()
         {
-            Debug.Log("Doing the pink cute");
-            var objects = Resources.FindObjectsOfTypeAll<TextMeshPro>();
+            Debug.Log("Performing the pink cute");
+            var objects = Resources.FindObjectsOfTypeAll<TMP_Text>();
             foreach (var textMeshPro in objects)
             {
                 textMeshPro.text = "pink cute";

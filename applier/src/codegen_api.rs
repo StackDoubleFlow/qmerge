@@ -124,10 +124,13 @@ fn _Z37il2cpp_codegen_get_executing_assemblyPK10MethodInfo(_: P) -> P;
 fn _Z48il2cpp_codegen_get_array_type_mismatch_exceptionv() -> P;
 
 #[proxy_codegen_api]
-fn _Z10SZArrayNewP11Il2CppClassj(_: P, _: P) -> P;
+fn _Z10SZArrayNewP11Il2CppClassj(_: P, _: u32) -> P;
 
 #[proxy_codegen_api]
-fn _Z6IsInstP12Il2CppObjectP11Il2CppClass(_: P, _: u32) -> P;
+fn _Z6IsInstP12Il2CppObjectP11Il2CppClass(_: P, _: P) -> P;
+
+#[proxy_codegen_api]
+fn _Z25RaiseInvalidCastExceptionP12Il2CppObjectP11Il2CppClass(_: P, _: P);
 
 // TODO: Maybe log and panic here instead of proxying call?
 #[proxy_codegen_api("_ZN6il2cpp2vm9Exception25GetMissingMethodExceptionEPKc")]

@@ -821,6 +821,16 @@ impl<'md> ModLoader<'md> {
             );
         }
 
+        debug!("Updating mod invoker indicies");
+        let invoker_idxs = unsafe {
+            let code_gen_module = &*code_gen_module;
+            debug!("count is {}", code_gen_module.methodPointerCount);
+            slice::from_raw_parts_mut(code_gen_module.invokerIndices as *mut i32, code_gen_module.methodPointerCount as usize)
+        };
+        for invoker_idx in invoker_idxs {
+            *invoker_idx += invokers_offset as i32;
+        }
+
         debug!("Resolving rest of added type defs");
         // Now that method references have been resolved, we go back through the type definitions and add items that required method references.
         for (i, ty_def) in mod_data.added_type_defintions.iter().enumerate() {

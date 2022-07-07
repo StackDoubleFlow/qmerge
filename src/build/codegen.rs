@@ -43,8 +43,9 @@ pub fn transform(
     let mut rgctx_indices: Vec<(u32, (usize, usize))> = Vec::new();
 
     while let Some(line) = lines.next() {
-        writeln!(new_src, "{}", line)?;
-        if line.starts_with("static const int32_t s_InvokerIndices") {
+        if let Some(rest) = line.strip_prefix("static const int32_t s_InvokerIndices[") {
+            let len: usize = rest.trim_end_matches("] = ").parse().unwrap();
+            writeln!(new_src, "static int32_t s_InvokerIndices[{}] = ", len)?;
             lines
                 .next()
                 .context("file ended reading s_InvokerIndices (skip '{')")?;
@@ -67,6 +68,7 @@ pub fn transform(
             }
             writeln!(new_src, "}};")?;
         } else if line.starts_with("static const Il2CppTokenRangePair s_rgctxIndices") {
+            writeln!(new_src, "{}", line)?;
             lines
                 .next()
                 .context("file ended reading s_rgctxIndices (skip '{')")?;
@@ -98,6 +100,7 @@ pub fn transform(
                 rgctx_indices.push((token, (start, len)));
             }
         } else if line.starts_with("static const Il2CppRGCTXDefinition s_rgctxValues") {
+            writeln!(new_src, "{}", line)?;
             lines
                 .next()
                 .context("file ended reading s_rgctxValues (skip '{')")?;
@@ -133,6 +136,8 @@ pub fn transform(
                 )?;
             }
             writeln!(new_src, "}};")?;
+        } else {
+            writeln!(new_src, "{}", line)?;
         }
     }
 
