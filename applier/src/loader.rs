@@ -16,7 +16,7 @@ use std::fs;
 use std::mem::transmute;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use topological_sort::TopologicalSort;
-use tracing::{error, info};
+use tracing::{error, info, debug};
 
 #[derive(Default, Debug)]
 pub struct ImportLut {
@@ -121,6 +121,9 @@ fn find_load_ordering(mods: &[(String, MergeModData, Arc<Library>)]) -> Vec<usiz
 
     let mut sort = TopologicalSort::new();
 
+    for i in 0..mods.len() {
+        sort.insert(i);
+    }
     for (idx, (id, mmd, _)) in mods.iter().enumerate() {
         for dep_id in &mmd.dependencies {
             match name_map.get(dep_id) {
@@ -182,6 +185,8 @@ fn load_mods(
 
         mods.push((id, mmd, lib));
     }
+
+    debug!("Found {} entries in mods directory", mods.len());
 
     let load_ordering = find_load_ordering(&mods);
     let mut init_fns = Vec::new();
