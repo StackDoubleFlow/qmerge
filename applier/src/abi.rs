@@ -177,7 +177,11 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
             arg.ptr = true;
             arg.size = 8;
         }
-        // B.5: TODO: change size?
+        // B.5
+        if is_composite_ty(arg.ty.type_()) {
+            arg.size = (arg.size + 7) & !7;
+        }
+        // B.6: alignment adjusted types?
     }
 
     let mut storage = Vec::new();
@@ -209,17 +213,21 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
                 nsrn += num;
                 continue;
             } else {
-                // C.3: TODO: size?
+                nsrn = 8;
+                arg.size = (arg.size + 7) & !7;
                 // C.4
                 let na = get_ty_class(ty).naturalAligment;
                 if na <= 8 {
-                    nsaa = (nsaa + 8) & !7;
+                    nsaa = (nsaa + 7) & !7;
                 } else if na >= 16 {
-                    nsaa = (nsaa + 16) & !15;
+                    nsaa = (nsaa + 15) & !15;
                 }
             }
         }
-        // C.5: TODO: size?
+        // C.5
+        if is_fp_ty(ty_enum) {
+            arg.size = 8;
+        }
         // C.6
         if hfa.is_some() || is_fp_ty(ty_enum) {
             storage.push(ParameterStorage::Stack(nsaa));
@@ -234,7 +242,10 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
             ngrn += 1;
             continue;
         }
-        // C.10: TODO: alignment
+        // C.10
+        if get_ty_class(ty).naturalAligment == 16 {
+            ngrn = (ngrn + 1) & !1;
+        }
         // C.11: We don't use 16 byte integral types
         // C.12
         let size_double_words = ((arg.size + 7) / 8) as u32;
@@ -244,13 +255,23 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
             continue;
         }
         ngrn = 8;
-        // C.14: TODO: alignment
+        // C.14
+        let stack_alignment = if is_composite_ty(ty_enum) {
+            (get_ty_class(ty).naturalAligment as u32).max(8)
+        } else {
+            8
+        };
+        // this will only work if the alignment is a power of two, which is should be
+        nsaa = (nsaa + (stack_alignment - 1)) & !(stack_alignment - 1);
         // C.15
         if is_composite_ty(ty_enum) {
             storage.push(ParameterStorage::Stack(nsaa));
             nsaa += arg.size as u32;
         }
-        // C.16: TODO: size?
+        // C.16
+        if arg.size < 8 {
+            arg.size = 8;
+        }
         // C.17
         storage.push(ParameterStorage::Stack(nsaa));
         nsaa += arg.size as u32;
