@@ -1,5 +1,5 @@
 use il2cpp_types::Il2CppReflectionMethod;
-use std::mem::transmute;
+use crate::hook;
 
 pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[(
     ("QMerge.Hooking", "HookManager", "CreatePostfixHook"),
@@ -8,8 +8,7 @@ pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[(
 
 unsafe fn create_postfix_hook(
     original_obj: *const Il2CppReflectionMethod,
-    target_obj: *const Il2CppReflectionMethod,
+    postfix_obj: *const Il2CppReflectionMethod,
 ) {
-    let original_method = &*(*original_obj).method;
-    tracing::debug!("in postfix hook thing");
+    hook::create_postfix_hook(original_obj, postfix_obj).unwrap()
 }

@@ -10,6 +10,7 @@ mod natives;
 mod setup;
 mod utils;
 mod xref;
+mod hook;
 
 use anyhow::Result;
 use loader::MOD_INIT_FNS;

@@ -9,19 +9,8 @@ using UnityEngine.SceneManagement;
 
 public class Plugin
 {
-    private static void OnSceneLoad(Scene scene, LoadSceneMode mode)
-    {
-        Debug.Log("Making PinkCute object");
-        var gameObject = new GameObject("PinkCute");
-        Debug.Log(gameObject);
-        gameObject.AddComponent<PinkCute>();
-        // gameObject.AddComponent<Rigidbody>();
-    }
-
     public static void Init()
     {
-        SceneManager.sceneLoaded += OnSceneLoad;
-        
         Debug.Log("Initializing MergeExample");
         Attribute[] attrs = Attribute.GetCustomAttributes(typeof(MainMenuViewControllerDidActivate), false);  // Reflection.  
   
