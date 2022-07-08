@@ -3,6 +3,7 @@ use super::{CodegenMethod, ParamInjection};
 use crate::utils::get_fields;
 use std::collections::{HashMap, HashSet};
 use std::mem::transmute;
+use il2cpp_types::FieldInfo;
 use tracing::debug;
 
 /// Fix up an ldr with an offset to data
@@ -44,6 +45,12 @@ impl PostfixGenerator {
         self.code.push(ins); // ldr x<to>, [sp, #<offset>]
     }
 
+    fn load_fpr(&mut self, num: u32, to: u32) {
+        let offset = self.use_fpr(num) as u32 / 8;
+        let ins = 0xfd4003e0 | (offset << 10) | to;
+        self.code.push(ins); // ldr d<to>, [sp, #<offset>]
+    }
+
     fn load_base_offset(&mut self, dest: u32, base: u32, offset: u32) {
         let offset = offset / 8;
         let ins = 0xf9400000 | (offset << 10) | (base << 5) | dest;
@@ -78,12 +85,48 @@ impl PostfixGenerator {
             let ins = 0xf90003e0 | (offset << 10) | gpr;
             prologue.push(ins);
         }
+        for (&fpr, &offset) in &self.using_fprs {
+            let offset = offset as u32 / 8;
+            let ins = 0xfd0003e0 | (offset << 10) | fpr;
+            prologue.push(ins);
+        }
 
         self.push_code_front(prologue);
 
         self.load_gpr(30, 30);
         self.code.push(0x910003ff | (stack_offset << 10)); // add sp, sp, #<stack_offset>
         self.code.push(0xd65f03c0); // ret
+    }
+
+    fn inject_field(&mut self, field: &FieldInfo, storage: &ParameterStorage) {
+        match storage {
+            ParameterStorage::GPReg(num) => {
+                // instance param
+                self.load_gpr(0, *num);
+                self.load_base_offset(*num, 0, field.offset as u32);
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn inject_param(&mut self, orig_storage: &ParameterStorage, storage: &ParameterStorage) {
+        match (orig_storage, storage) {
+            // gpr -> gpr
+            (
+                ParameterStorage::GPReg(orig_num),
+                ParameterStorage::GPReg(num),
+            ) => {
+                self.load_gpr(*orig_num, *num)
+            }
+            // fpr -> fpr
+            (
+                ParameterStorage::VectorReg(orig_num),
+                ParameterStorage::VectorReg(num),
+            ) => {
+                self.load_fpr(*orig_num, *num)
+            }
+            _ => todo!()
+        }
     }
 
     pub(super) fn gen_postfix(
@@ -100,19 +143,17 @@ impl PostfixGenerator {
                 ParamInjection::LoadField(idx) => {
                     let fields = unsafe { get_fields(original.method.klass) };
                     let field = &fields[*idx];
-                    match storage {
-                        ParameterStorage::GPReg(num) => {
-                            // instance param
-                            self.load_gpr(0, *num);
-                            self.load_base_offset(*num, 0, field.offset as u32);
-                            self.call_addr(postfix.method.methodPointer.unwrap() as usize);
-                        }
-                        _ => todo!(),
-                    }
+                    self.inject_field(field, storage);
+                }
+                ParamInjection::OriginalParam(idx) => {
+                    // let param = &original.params[*idx];
+                    let orig_storage = &original.layout[*idx];
+                    self.inject_param(orig_storage, storage);
                 }
                 _ => todo!(),
             }
         }
+        self.call_addr(postfix.method.methodPointer.unwrap() as usize);
     }
 
     pub fn finish(mut self) -> (Vec<u32>, usize) {
