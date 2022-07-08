@@ -139,7 +139,7 @@ pub enum ParameterStorage {
     Stack(u32),
     // Copy to general purpose registers starting at x[.0] using .1 registers as if the structure was loaded with consecutive ldrs
     GPRRange(u32, u32),
-    GPRReg(u32),
+    GPReg(u32),
 }
 
 struct Arg {
@@ -242,7 +242,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         // C.8: see above
         // C.9
         if (is_integral_ty(ty_enum) || is_pointer_ty(ty_enum)) && arg.size <= 8 && ngrn < 8 {
-            storage.push(ParameterStorage::GPRReg(ngrn));
+            storage.push(ParameterStorage::GPReg(ngrn));
             ngrn += 1;
             continue;
         }

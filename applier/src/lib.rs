@@ -2,7 +2,6 @@
 #![feature(naked_functions)]
 #![feature(asm_sym)]
 
-mod abi;
 mod asm;
 mod codegen_api;
 mod hook;

@@ -1,4 +1,8 @@
-use crate::{abi, utils::get_fields};
+
+mod abi;
+mod codegen;
+
+use crate::{utils::get_fields, hook::codegen::PostfixGenerator};
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC,
@@ -6,6 +10,8 @@ use il2cpp_types::{
 use std::ffi::CStr;
 use std::slice;
 use tracing::{debug, instrument};
+
+use self::abi::ParameterStorage;
 
 struct Param {
     name: &'static str,
@@ -101,15 +107,38 @@ pub unsafe fn create_postfix_hook(
         }
     }
 
-    let is_instance = (original_method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
-    let original_param_types: Vec<_> = original_params.iter().map(|param| &*param.ty ).collect();
-    let original_layout = abi::layout_parameters(is_instance, &original_param_types);
-
-    let postfix_param_types: Vec<_> = postfix_params.iter().map(|param| &*param.ty ).collect();
-    let postfix_layout = abi::layout_parameters(false, &postfix_param_types);
+    let original_codegen = CodegenMethod::new(original_method, original_params);
+    let postfix_codegen = CodegenMethod::new(postfix_method, postfix_params);
 
     debug!("Injection: {:?}", injections);
-    debug!(?original_layout, ?postfix_layout);
+    debug!("Original layout: {:?}", original_codegen.layout);
+    debug!("Postfix layout: {:?}", postfix_codegen.layout);
+    let mut gen = PostfixGenerator::default();
+    gen.gen_postfix(original_codegen, postfix_codegen, injections);
+    gen.finish();
 
     Ok(())
 }
+
+struct CodegenMethod {
+    method: &'static MethodInfo,
+    params: Vec<Param>,
+    layout: Vec<ParameterStorage>,
+    is_instance: bool,
+}
+
+impl CodegenMethod {
+    fn new(method: &'static MethodInfo, params: Vec<Param>) -> Self {
+        let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty } ).collect();
+        let is_instance = (method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
+        let layout = abi::layout_parameters(is_instance, &param_types);
+        Self {
+            method,
+            params,
+            layout,
+            is_instance
+        }
+    }
+}
+
+
