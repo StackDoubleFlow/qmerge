@@ -1,15 +1,18 @@
 
 mod abi;
 mod codegen;
+mod alloc;
 
-use crate::{utils::get_fields, hook::codegen::PostfixGenerator};
+use crate::{utils::get_fields, hook::{codegen::PostfixGenerator, alloc::HOOK_ALLOCATOR}};
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC,
 };
+use inline_hook::Hook;
 use std::ffi::CStr;
 use std::slice;
 use tracing::{debug, instrument};
+use std::fmt::Write;
 
 use self::abi::ParameterStorage;
 
@@ -115,7 +118,35 @@ pub unsafe fn create_postfix_hook(
     debug!("Postfix layout: {:?}", postfix_codegen.layout);
     let mut gen = PostfixGenerator::default();
     gen.gen_postfix(original_codegen, postfix_codegen, injections);
-    gen.finish();
+
+    let (data, code_len) = gen.finish();
+    let data_ptr = HOOK_ALLOCATOR.lock().unwrap().alloc(&data);
+
+    let hook = Hook::new();
+    hook.install(original_method.methodPointer.unwrap() as _, data_ptr as _);
+
+    let new_orig = hook.original().unwrap();
+    // This assumes the orig pointer is the first fixup entry
+    let orig_fixup_ptr = data_ptr.add(code_len) as *mut usize;
+    orig_fixup_ptr.write(new_orig as usize);
+
+
+
+    debug!("dumping generated code");
+    let code = std::slice::from_raw_parts(data_ptr, data.len());
+    for (i, ins) in code[0..code_len].iter().enumerate() {
+        let ptr = ins as *const u32;
+        debug!("{:?}: {}", ptr, bad64::decode(*ins, ptr as u64).unwrap());
+    }
+    let mut data_str = String::from("data: ");
+    for &data in &code[code_len..] {
+        let bytes: [u8; 4] = data.to_ne_bytes();
+        for b in bytes {
+            write!(data_str, "{:02x}", b).unwrap();
+        }
+    }
+    debug!("{}", data_str);
+
 
     Ok(())
 }

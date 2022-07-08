@@ -572,6 +572,7 @@ dependencies = [
  "dlopen",
  "il2cpp_types",
  "inline_hook",
+ "libc",
  "merge_data",
  "paranoid-android",
  "serde",

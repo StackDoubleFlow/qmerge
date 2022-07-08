@@ -1,7 +1,6 @@
 use std::collections::{HashSet, HashMap};
 use std::mem::transmute;
 use tracing::debug;
-use std::fmt::Write;
 use crate::utils::get_fields;
 use super::{CodegenMethod, ParamInjection, abi::ParameterStorage};
 
@@ -69,7 +68,7 @@ impl PostfixGenerator {
     fn write_prologue_epilogue(&mut self) {
         let mut prologue = Vec::new();
 
-        let stack_offset = self.stack_offset as u32;
+        let stack_offset = (self.stack_offset as u32 + 15) & !15;
         prologue.push(0xd10003ff | (stack_offset << 10)); // sub sp, sp, #<stack_offset>
 
         for (&gpr, &offset) in &self.using_gprs {
@@ -85,14 +84,8 @@ impl PostfixGenerator {
     }
 
     pub(super) fn gen_postfix(&mut self, original: CodegenMethod, postfix: CodegenMethod, injections: Vec<ParamInjection>) {
-        self.call_addr(original.method.methodPointer.unwrap() as usize);
-        // let code = Vec::new();
-        // subtract sp
-        // write used params to stack
-        // call original
-        // load injections
-        // call postfix
-        // add sp
+        // Call original, this fixup gets fixed
+        self.call_addr(0);
     
         for (injection, storage) in injections.iter().zip(postfix.layout.iter()) {
             match injection {
@@ -114,7 +107,7 @@ impl PostfixGenerator {
         }
     }
 
-    pub fn finish(mut self) -> Vec<u32> {
+    pub fn finish(mut self) -> (Vec<u32>, usize) {
         self.write_prologue_epilogue();
         let code_len = self.code.len();
 
@@ -126,20 +119,7 @@ impl PostfixGenerator {
             self.code.push(parts[1]);
         }
 
-        debug!("dumping generated code");
-        for (i, &ins) in self.code[0..code_len].iter().enumerate() {
-            debug!("{}", bad64::decode(ins, i as u64 * 4).unwrap());
-        }
-        let mut data_str = String::from("data: ");
-        for &data in &self.code[code_len..] {
-            let bytes: [u8; 4] = data.to_ne_bytes();
-            for b in bytes {
-                write!(data_str, "{:x}", b).unwrap();
-            }
-        }
-        debug!("{}", data_str);
-
-        self.code
+        (self.code, code_len)
     }
 }
 
