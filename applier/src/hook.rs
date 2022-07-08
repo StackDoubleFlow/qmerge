@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use il2cpp_types::{Il2CppReflectionMethod, Il2CppType, MethodInfo, Il2CppClass, FieldInfo, METHOD_ATTRIBUTE_STATIC};
-use tracing::debug;
+use tracing::{debug, instrument};
+use crate::codegen_api::_ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass;
 use std::slice;
 use std::ffi::CStr;
 
@@ -17,12 +18,19 @@ unsafe fn get_params(method: &MethodInfo) -> Result<Vec<Param>> {
     })).collect()
 }
 
-unsafe fn get_fields(class: *const Il2CppClass) -> &'static [FieldInfo] {
+unsafe fn ensure_class_init(class: *mut Il2CppClass) {
+    if (*class).initialized_and_no_error() == 0 {
+        _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass(class);
+    }
+}
+
+unsafe fn get_fields(class: *mut Il2CppClass) -> &'static [FieldInfo] {
+    ensure_class_init(class);
     let class = &*class;
     slice::from_raw_parts(class.fields, class.field_count as usize)
 }
 
-unsafe fn find_field(class: *const Il2CppClass, name: &str) -> Result<Option<usize>> {
+unsafe fn find_field(class: *mut Il2CppClass, name: &str) -> Result<Option<usize>> {
     for (i, field) in get_fields(class).iter().enumerate() {
         let field_name = CStr::from_ptr(field.name).to_str()?;
         if name == field_name {
@@ -54,8 +62,10 @@ pub unsafe fn create_postfix_hook(
 
     let mut injections = Vec::new();
     for param in &postfix_params {
-        if let Some(field_name) = param.name.strip_suffix("___") {
+        debug!("{:?}", param.name.strip_prefix("___"));
+        if let Some(field_name) = param.name.strip_prefix("___") {
             let idx = find_field(original_method.klass, field_name)?;
+            debug!("{:?}", idx);
             match idx {
                 Some(idx) => {
                     if param.ty != get_fields(original_method.klass)[idx].type_ {

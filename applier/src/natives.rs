@@ -1,4 +1,4 @@
-use il2cpp_types::Il2CppReflectionMethod;
+use il2cpp_types::{Il2CppReflectionMethod, MethodInfo};
 use crate::hook;
 
 pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[(
@@ -6,9 +6,10 @@ pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[(
     create_postfix_hook as _,
 )];
 
-unsafe fn create_postfix_hook(
+unsafe extern "C" fn create_postfix_hook(
     original_obj: *const Il2CppReflectionMethod,
     postfix_obj: *const Il2CppReflectionMethod,
+    _: *const MethodInfo,
 ) {
     hook::create_postfix_hook(original_obj, postfix_obj).unwrap()
 }

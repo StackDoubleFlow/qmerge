@@ -106,7 +106,7 @@ fn _Z39il2cpp_codegen_class_from_type_internalPK10Il2CppType(_: P) -> P;
 fn _Z3BoxP11Il2CppClassPv(_: P, _: P) -> P;
 
 #[proxy_codegen_api]
-fn _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass(_: P);
+fn _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass(_: *mut Il2CppClass);
 
 #[proxy_codegen_api]
 fn _Z30il2cpp_codegen_raise_exceptionP11Exception_tP10MethodInfo(_: P, _: P);
