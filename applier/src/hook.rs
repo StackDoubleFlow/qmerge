@@ -1,4 +1,4 @@
-use crate::codegen_api::_ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass;
+use crate::{abi, utils::get_fields};
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC,
@@ -23,18 +23,6 @@ unsafe fn get_params(method: &MethodInfo) -> Result<Vec<Param>> {
             })
         })
         .collect()
-}
-
-unsafe fn ensure_class_init(class: *mut Il2CppClass) {
-    if (*class).initialized_and_no_error() == 0 {
-        _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass(class);
-    }
-}
-
-unsafe fn get_fields(class: *mut Il2CppClass) -> &'static [FieldInfo] {
-    ensure_class_init(class);
-    let class = &*class;
-    slice::from_raw_parts(class.fields, class.field_count as usize)
 }
 
 unsafe fn find_field(class: *mut Il2CppClass, name: &str) -> Result<Option<usize>> {
@@ -113,7 +101,15 @@ pub unsafe fn create_postfix_hook(
         }
     }
 
+    let is_instance = (original_method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
+    let original_param_types: Vec<_> = original_params.iter().map(|param| &*param.ty ).collect();
+    let original_layout = abi::layout_parameters(is_instance, &original_param_types);
+
+    let postfix_param_types: Vec<_> = postfix_params.iter().map(|param| &*param.ty ).collect();
+    let postfix_layout = abi::layout_parameters(false, &postfix_param_types);
+
     debug!("Injection: {:?}", injections);
+    debug!(?original_layout, ?postfix_layout);
 
     Ok(())
 }

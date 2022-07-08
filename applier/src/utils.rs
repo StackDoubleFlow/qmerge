@@ -1,6 +1,8 @@
+use crate::codegen_api::_ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass;
 use anyhow::Result;
+use il2cpp_types::{Il2CppClass, FieldInfo};
 use std::path::PathBuf;
-use std::str;
+use std::{str, slice};
 
 pub fn get_mod_data_path() -> PathBuf {
     // TODO
@@ -31,4 +33,16 @@ pub fn get_str(data: &[u8], offset: usize) -> Result<&str> {
     let len = strlen(data, offset);
     let str = str::from_utf8(&data[offset..offset + len])?;
     Ok(str)
+}
+
+pub unsafe fn ensure_class_init(class: *mut Il2CppClass) {
+    if (*class).initialized_and_no_error() == 0 {
+        _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass(class);
+    }
+}
+
+pub unsafe fn get_fields(class: *mut Il2CppClass) -> &'static [FieldInfo] {
+    ensure_class_init(class);
+    let class = &*class;
+    slice::from_raw_parts(class.fields, class.field_count as usize)
 }

@@ -1,7 +1,10 @@
+// It doesn't like how the Il2CppTypeEnum values are named
+#![allow(non_upper_case_globals)]
+
 use crate::codegen_api::_ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi;
+use crate::utils::get_fields;
 use il2cpp_types::*;
 use std::mem::size_of;
-use std::slice;
 
 fn is_fp_ty(ty: Il2CppTypeEnum) -> bool {
     matches!(
@@ -96,7 +99,7 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
     }
 
     let class = get_ty_class(ty);
-    let fields = unsafe { slice::from_raw_parts(class.fields, class.field_count as usize) };
+    let fields = unsafe { get_fields(class as *const _ as *mut _) };
     let mut base_ty = None;
     let mut num = 0;
     for field in fields {
@@ -127,7 +130,8 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
     }
 }
 
-enum ParameterStorage {
+#[derive(Debug)]
+pub enum ParameterStorage {
     VectorReg(u32),
     // Copy fields to consecutive vector registers starting at v[.0] with count .1  (one register per member)
     VectorRange(u32, u32),
@@ -146,7 +150,7 @@ struct Arg {
 }
 
 /// The instance parameter doesn't get returned, but is always in x0
-fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
+pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<ParameterStorage> {
     // A.1: next gpr num
     let mut ngrn = 0;
     // A.2: next vector reg num
@@ -276,4 +280,6 @@ fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) {
         storage.push(ParameterStorage::Stack(nsaa));
         nsaa += arg.size as u32;
     }
+
+    storage
 }
