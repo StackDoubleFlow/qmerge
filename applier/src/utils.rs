@@ -1,8 +1,8 @@
 use crate::codegen_api::_ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass;
 use anyhow::Result;
-use il2cpp_types::{Il2CppClass, FieldInfo};
+use il2cpp_types::{FieldInfo, Il2CppClass};
 use std::path::PathBuf;
-use std::{str, slice};
+use std::{slice, str};
 
 pub fn get_mod_data_path() -> PathBuf {
     // TODO

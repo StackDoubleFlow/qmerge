@@ -1,18 +1,19 @@
-
 mod abi;
-mod codegen;
 mod alloc;
+mod codegen;
 
-use crate::{utils::get_fields, hook::{codegen::PostfixGenerator, alloc::HOOK_ALLOCATOR}};
+use crate::hook::alloc::HOOK_ALLOCATOR;
+use crate::hook::codegen::PostfixGenerator;
+use crate::utils::get_fields;
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC,
 };
 use inline_hook::Hook;
 use std::ffi::CStr;
+use std::fmt::Write;
 use std::slice;
 use tracing::{debug, instrument};
-use std::fmt::Write;
 
 use self::abi::ParameterStorage;
 
@@ -130,8 +131,6 @@ pub unsafe fn create_postfix_hook(
     let orig_fixup_ptr = data_ptr.add(code_len) as *mut usize;
     orig_fixup_ptr.write(new_orig as usize);
 
-
-
     debug!("dumping generated code");
     let code = std::slice::from_raw_parts(data_ptr, data.len());
     for (i, ins) in code[0..code_len].iter().enumerate() {
@@ -147,7 +146,6 @@ pub unsafe fn create_postfix_hook(
     }
     debug!("{}", data_str);
 
-
     Ok(())
 }
 
@@ -160,16 +158,14 @@ struct CodegenMethod {
 
 impl CodegenMethod {
     fn new(method: &'static MethodInfo, params: Vec<Param>) -> Self {
-        let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty } ).collect();
+        let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty }).collect();
         let is_instance = (method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
         let layout = abi::layout_parameters(is_instance, &param_types);
         Self {
             method,
             params,
             layout,
-            is_instance
+            is_instance,
         }
     }
 }
-
-

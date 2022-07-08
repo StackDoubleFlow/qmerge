@@ -1,8 +1,9 @@
-use std::collections::{HashSet, HashMap};
+use super::abi::ParameterStorage;
+use super::{CodegenMethod, ParamInjection};
+use crate::utils::get_fields;
+use std::collections::{HashMap, HashSet};
 use std::mem::transmute;
 use tracing::debug;
-use crate::utils::get_fields;
-use super::{CodegenMethod, ParamInjection, abi::ParameterStorage};
 
 /// Fix up an ldr with an offset to data
 struct DataFixup {
@@ -30,7 +31,7 @@ impl PostfixGenerator {
     }
 
     fn use_fpr(&mut self, num: u32) -> usize {
-        *self.using_gprs.entry(num).or_insert_with(|| {
+        *self.using_fprs.entry(num).or_insert_with(|| {
             let offset = self.stack_offset;
             self.stack_offset += 8;
             offset
@@ -38,7 +39,7 @@ impl PostfixGenerator {
     }
 
     fn load_gpr(&mut self, num: u32, to: u32) {
-        let offset = self.use_gpr(num) as u32;
+        let offset = self.use_gpr(num) as u32 / 8;
         let ins = 0xf94003e0 | (offset << 10) | to;
         self.code.push(ins); // ldr x<to>, [sp, #<offset>]
     }
@@ -52,7 +53,7 @@ impl PostfixGenerator {
     fn call_addr(&mut self, addr: usize) {
         self.data.push(DataFixup {
             data: addr,
-            ins_idx: self.code.len()
+            ins_idx: self.code.len(),
         });
         self.code.push(0x58000009); // ldr x9, 0x0
         self.code.push(0xd63f0120); // blr x9
@@ -66,6 +67,7 @@ impl PostfixGenerator {
     }
 
     fn write_prologue_epilogue(&mut self) {
+        self.use_gpr(30);
         let mut prologue = Vec::new();
 
         let stack_offset = (self.stack_offset as u32 + 15) & !15;
@@ -79,14 +81,20 @@ impl PostfixGenerator {
 
         self.push_code_front(prologue);
 
+        self.load_gpr(30, 30);
         self.code.push(0x910003ff | (stack_offset << 10)); // add sp, sp, #<stack_offset>
         self.code.push(0xd65f03c0); // ret
     }
 
-    pub(super) fn gen_postfix(&mut self, original: CodegenMethod, postfix: CodegenMethod, injections: Vec<ParamInjection>) {
+    pub(super) fn gen_postfix(
+        &mut self,
+        original: CodegenMethod,
+        postfix: CodegenMethod,
+        injections: Vec<ParamInjection>,
+    ) {
         // Call original, this fixup gets fixed
         self.call_addr(0);
-    
+
         for (injection, storage) in injections.iter().zip(postfix.layout.iter()) {
             match injection {
                 ParamInjection::LoadField(idx) => {
@@ -102,7 +110,7 @@ impl PostfixGenerator {
                         _ => todo!(),
                     }
                 }
-                _ => todo!()
+                _ => todo!(),
             }
         }
     }
@@ -122,5 +130,3 @@ impl PostfixGenerator {
         (self.code, code_len)
     }
 }
-
-

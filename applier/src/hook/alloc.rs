@@ -1,13 +1,11 @@
-use std::sync::LazyLock;
-use libc::{sysconf, _SC_PAGE_SIZE, mprotect, PROT_READ, PROT_WRITE, PROT_EXEC};
+use libc::{mprotect, sysconf, PROT_EXEC, PROT_READ, PROT_WRITE, _SC_PAGE_SIZE};
 use std::mem::take;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 pub static HOOK_ALLOCATOR: LazyLock<Mutex<HookAllocator>> = LazyLock::new(Default::default);
-/// The page size in instructions (bytes * 4)
-static PAGE_SIZE: LazyLock<usize> = LazyLock::new(|| {
-    unsafe { sysconf(_SC_PAGE_SIZE) as usize / 4 }
-});
+/// The page size in instructions (bytes / 4)
+static PAGE_SIZE: LazyLock<usize> =
+    LazyLock::new(|| unsafe { sysconf(_SC_PAGE_SIZE) as usize / 4 });
 
 struct Page {
     data: Box<[u32]>,
@@ -18,13 +16,14 @@ impl Default for Page {
     fn default() -> Self {
         let data = vec![0; *PAGE_SIZE].into_boxed_slice();
         unsafe {
-            mprotect(data.as_ptr() as _, *PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+            mprotect(
+                data.as_ptr() as _,
+                *PAGE_SIZE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+            );
         }
-        
-        Self {
-            data,
-            used: 0,
-        }
+
+        Self { data, used: 0 }
     }
 }
 
