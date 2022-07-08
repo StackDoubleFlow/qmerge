@@ -1,5 +1,5 @@
-use il2cpp_types::{Il2CppReflectionMethod, MethodInfo};
 use crate::hook;
+use il2cpp_types::{Il2CppReflectionMethod, MethodInfo};
 
 pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[(
     ("QMerge.Hooking", "HookManager", "CreatePostfixHook"),

@@ -16,7 +16,7 @@ use std::fs;
 use std::mem::transmute;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use topological_sort::TopologicalSort;
-use tracing::{error, info, debug};
+use tracing::{debug, error, info};
 
 #[derive(Default, Debug)]
 pub struct ImportLut {

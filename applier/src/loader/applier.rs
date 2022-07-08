@@ -824,7 +824,10 @@ impl<'md> ModLoader<'md> {
         debug!("Updating mod invoker indicies");
         let invoker_idxs = unsafe {
             let code_gen_module = &*code_gen_module;
-            slice::from_raw_parts_mut(code_gen_module.invokerIndices as *mut i32, code_gen_module.methodPointerCount as usize)
+            slice::from_raw_parts_mut(
+                code_gen_module.invokerIndices as *mut i32,
+                code_gen_module.methodPointerCount as usize,
+            )
         };
         for invoker_idx in invoker_idxs {
             *invoker_idx += invokers_offset as i32;
