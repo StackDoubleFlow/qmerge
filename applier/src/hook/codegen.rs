@@ -150,7 +150,9 @@ impl PostfixGenerator {
                     let orig_storage = &original.layout[*idx];
                     self.inject_param(orig_storage, storage);
                 }
-                _ => todo!(),
+                ParamInjection::Instance => {
+                    self.load_gpr(0, 0);
+                }
             }
         }
         self.call_addr(postfix.method.methodPointer.unwrap() as usize);

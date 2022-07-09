@@ -7,7 +7,7 @@ use crate::hook::codegen::PostfixGenerator;
 use crate::utils::get_fields;
 use anyhow::{bail, Result};
 use il2cpp_types::{
-    FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC,
+    FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC, Il2CppTypeEnum_IL2CPP_TYPE_CLASS, Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE,
 };
 use inline_hook::Hook;
 use std::ffi::CStr;
@@ -57,6 +57,7 @@ unsafe fn field_ty_matches(field_ty: *const Il2CppType, injection_ty: *const Il2
 enum ParamInjection {
     OriginalParam(usize),
     LoadField(usize),
+    Instance,
 }
 
 pub unsafe fn create_postfix_hook(
@@ -72,6 +73,7 @@ pub unsafe fn create_postfix_hook(
     if postfix_method.flags & METHOD_ATTRIBUTE_STATIC as u16 == 0 {
         bail!("Postfix method must be static");
     }
+    let is_instance = (original_method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
 
     let mut injections = Vec::new();
     for param in &postfix_params {
@@ -89,6 +91,18 @@ pub unsafe fn create_postfix_hook(
                     injections.push(ParamInjection::LoadField(idx))
                 }
                 None => bail!("could not find field with name {}", field_name),
+            }
+        } else if param.name == "__instance" {
+            if !is_instance {
+                bail!("cannot inject __instance parameter on non-instance method");
+            }
+            let ty = &*param.ty;
+
+            if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS || (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE && ty.byref() != 0) {
+                // TODO: Verify type data
+                injections.push(ParamInjection::Instance);
+            } else {
+                bail!("type mismatch for instance parameter injection");
             }
         } else {
             let mut found = false;
@@ -111,8 +125,8 @@ pub unsafe fn create_postfix_hook(
         }
     }
 
-    let original_codegen = CodegenMethod::new(original_method, original_params);
-    let postfix_codegen = CodegenMethod::new(postfix_method, postfix_params);
+    let original_codegen = CodegenMethod::new(original_method, original_params, is_instance);
+    let postfix_codegen = CodegenMethod::new(postfix_method, postfix_params, false);
 
     debug!("Injection: {:?}", injections);
     debug!("Original layout: {:?}", original_codegen.layout);
@@ -133,7 +147,7 @@ pub unsafe fn create_postfix_hook(
 
     debug!("dumping generated code");
     let code = std::slice::from_raw_parts(data_ptr, data.len());
-    for (i, ins) in code[0..code_len].iter().enumerate() {
+    for ins in &code[0..code_len] {
         let ptr = ins as *const u32;
         debug!("{:?}: {}", ptr, bad64::decode(*ins, ptr as u64).unwrap());
     }
@@ -153,19 +167,16 @@ struct CodegenMethod {
     method: &'static MethodInfo,
     params: Vec<Param>,
     layout: Vec<ParameterStorage>,
-    is_instance: bool,
 }
 
 impl CodegenMethod {
-    fn new(method: &'static MethodInfo, params: Vec<Param>) -> Self {
+    fn new(method: &'static MethodInfo, params: Vec<Param>, is_instance: bool) -> Self {
         let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty }).collect();
-        let is_instance = (method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
         let layout = abi::layout_parameters(is_instance, &param_types);
         Self {
             method,
             params,
             layout,
-            is_instance,
         }
     }
 }
