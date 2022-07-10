@@ -49,16 +49,26 @@ impl Code {
     }
 
     /// ldr d<dest>, [x<base>/sp, #<offset>]
-    fn load_base_offset_fp(&mut self, dest: u32, base: u32, offset: u32) {
-        let offset = offset / 8;
-        let ins = 0xfd400000 | (offset << 10) | (base << 5) | dest;
+    fn load_base_offset_fp(&mut self, dest: u32, base: u32, offset: u32, size: u32) {
+        let offset = offset / size;
+        let ins = match size {
+            8 => 0xfd400000,
+            4 => 0xbd400000,
+            _ => unreachable!()
+        };
+        let ins = ins | (offset << 10) | (base << 5) | dest;
         self.code.push(ins);
     }
 
     /// str d<src>, [x<base>/sp, #<offset>]
-    fn store_base_offset_fp(&mut self, src: u32, base: u32, offset: u32) {
-        let offset = offset / 8;
-        let ins = 0xfd000000 | (offset << 10) | (base << 5) | src;
+    fn store_base_offset_fp(&mut self, src: u32, base: u32, offset: u32, size: u32) {
+        let offset = offset / size;
+        let ins = match size {
+            8 => 0xfd000000,
+            4 => 0xbd000000,
+            _ => unreachable!()
+        };
+        let ins = ins | (offset << 10) | (base << 5) | src;
         self.code.push(ins);
     }
 
@@ -174,6 +184,8 @@ impl<'a> HookGenerator<'a> {
         };
         let mut code = Code::default();
         for arg in &original.layout.args {
+            // We'll just align everything to 8 for now
+            stack_offset = (stack_offset as u32 + 7) & !7;
             param_offsets.push(stack_offset);
             // let ty = arg.ty;
             match arg.storage {
@@ -184,10 +196,15 @@ impl<'a> HookGenerator<'a> {
                     code.store_base_offset(reg, 31, stack_offset);
                     stack_offset += 8;
                 }
-                ParameterStorage::VectorRange(start, count) => {
+                ParameterStorage::VectorReg(reg) => {
+                    code.store_base_offset_fp(reg, 31, stack_offset, 8);
+                    stack_offset += 8;
+                }
+                ParameterStorage::VectorRange(start, count, is_double) => {
                     for reg in start..start + count {
-                        code.store_base_offset_fp(reg, 31, stack_offset);
-                        stack_offset += 8;
+                        let size = is_double.then_some(8).unwrap_or(4);
+                        code.store_base_offset_fp(reg, 31, stack_offset, size);
+                        stack_offset += size;
                     }
                 }
                 ParameterStorage::Stack(offset) => {
@@ -217,9 +234,13 @@ impl<'a> HookGenerator<'a> {
             ParameterStorage::GPReg(reg) => {
                 self.code.load_base_offset(reg, 31, offset);
             }
-            ParameterStorage::VectorRange(start, count) => {
+            ParameterStorage::VectorReg(reg) => {
+                self.code.load_base_offset_fp(reg, 31, offset, 8);
+            }
+            ParameterStorage::VectorRange(start, count, is_double) => {
+                let size = is_double.then_some(8).unwrap_or(4);
                 for i in 0..count {
-                    self.code.load_base_offset_fp(start + i, 31, offset + i * 8);
+                    self.code.load_base_offset_fp(start + i, 31, offset + i * size, size);
                 }
             }
             ParameterStorage::Stack(to_offset) => {

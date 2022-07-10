@@ -93,7 +93,7 @@ fn get_ty_size(ty: &Il2CppType) -> usize {
 }
 
 // Returns the number of registers the fields would consume
-fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
+fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<(u32, Il2CppTypeEnum)> {
     if !is_composite_ty(ty_enum) {
         return None;
     }
@@ -123,8 +123,8 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
         num += 1;
     }
 
-    if num <= 4 {
-        Some(num)
+    if num <= 4 && base_ty.is_some() {
+        Some((num, base_ty.unwrap()))
     } else {
         None
     }
@@ -134,8 +134,9 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
 pub enum ParameterStorage {
     Unallocated,
     VectorReg(u32),
-    // Copy fields to consecutive vector registers starting at v[.0] with count .1  (one register per member)
-    VectorRange(u32, u32),
+    // Copy fields to consecutive vector registers starting at v[.0] with count .1 (one register per member).
+    // .2 if double
+    VectorRange(u32, u32, bool),
     // Copy to stack at offset .0
     Stack(u32),
     // Copy to general purpose registers starting at x[.0] using .1 registers as if the structure was loaded with consecutive ldrs
@@ -218,10 +219,11 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
             continue;
         }
         let hfa = is_hfa(ty, ty_enum);
-        if let Some(num) = hfa {
+        if let Some((num, base_ty)) = hfa {
             if nsrn + num <= 8 {
                 // C.2
-                arg.storage = ParameterStorage::VectorRange(nsrn, num);
+                let is_double = base_ty == Il2CppTypeEnum_IL2CPP_TYPE_R8;
+                arg.storage = ParameterStorage::VectorRange(nsrn, num, is_double);
                 nsrn += num;
                 continue;
             } else {
