@@ -7,7 +7,7 @@ use std::mem::transmute;
 use std::slice;
 use il2cpp_types::FieldInfo;
 use inline_hook::Hook;
-use tracing::debug;
+use tracing::{debug, instrument};
 use std::fmt::Write;
 
 enum DataFixupInfo {
@@ -25,6 +25,7 @@ struct DataFixup {
 struct Code {
     code: Vec<u32>,
     data: Vec<DataFixup>,
+    param_spill_fixups: Vec<usize>,
 }
 
 impl Code {
@@ -33,6 +34,11 @@ impl Code {
         let offset = offset / 8;
         let ins = 0xf9400000 | (offset << 10) | (base << 5) | dest;
         self.code.push(ins);
+    }
+
+    fn load_spill(&mut self, dest: u32, offset: u32) {
+        self.param_spill_fixups.push(self.code.len());
+        self.load_base_offset(dest, 31, offset);
     }
 
     /// str x<src>, [x<base>/sp, #<offset>]
@@ -77,6 +83,7 @@ impl Code {
         for fixup in &mut self.data {
             fixup.ins_idx += other.code.len();
         }
+        self.param_spill_fixups.iter_mut().for_each(|idx| *idx += other.code.len());
         self.code.splice(0..0, other.code);
     }
 
@@ -96,7 +103,12 @@ impl Code {
         self.code.len() + self.data.len() * 2
     }
 
-    fn copy_to(&mut self, dest: *mut u32, orig_addr: usize) {
+    fn copy_to(&mut self, dest: *mut u32, orig_addr: usize, stack_size: u32) {
+        let stack_size_offset = stack_size / 8;
+        for &ins_idx in &self.param_spill_fixups {
+            self.code[ins_idx] += stack_size_offset << 10;
+        }
+
         let fixup_data = self.data.iter().map(|fixup| {
             (
                 fixup.ins_idx,
@@ -128,7 +140,7 @@ impl Code {
         debug!("dumping generated code");
         for ins in &code_slice[0..self.code.len()] {
             let ptr = ins as *const u32;
-            debug!("{:?}: {}", ptr, bad64::decode(*ins, ptr as u64).unwrap());
+            debug!("{:?}: {:08x}:  {}", ptr, *ins, bad64::decode(*ins, ptr as u64).unwrap());
         }
         let mut data_str = String::from("data: ");
         for i in 0..self.data.len() {
@@ -178,6 +190,14 @@ impl<'a> HookGenerator<'a> {
                         stack_offset += 8;
                     }
                 }
+                ParameterStorage::Stack(offset) => {
+                    let count = arg.size / 8;
+                    for i in 0..count as u32 {
+                        code.load_spill(9, offset + i * 8);
+                        code.store_base_offset(9, 31, stack_offset);
+                        stack_offset += 8;
+                    }
+                }
                 _ => todo!(),
             }
         }
@@ -200,6 +220,13 @@ impl<'a> HookGenerator<'a> {
             ParameterStorage::VectorRange(start, count) => {
                 for i in 0..count {
                     self.code.load_base_offset_fp(start + i, 31, offset + i * 8);
+                }
+            }
+            ParameterStorage::Stack(to_offset) => {
+                let count = to.size / 8;
+                for i in 0..count as u32 {
+                    self.code.load_base_offset(9, 31, offset + i * 8);
+                    self.code.store_base_offset(9, 31, to_offset + i * 8);
                 }
             }
             _ => todo!(),
@@ -253,13 +280,13 @@ impl<'a> HookGenerator<'a> {
         let lr_offset = self.stack_offset;
         self.stack_offset += 8;
 
-        let stack_offset = (self.stack_offset as u32 + 15) & !15;
-        prologue.sub_imm(31, 31, stack_offset);
+        self.stack_offset = (self.stack_offset as u32 + 15) & !15;
+        prologue.sub_imm(31, 31, self.stack_offset);
         prologue.store_base_offset(30, 31, lr_offset); // save lr
         self.code.push_front(prologue);
 
         self.code.load_base_offset(30, 31, lr_offset); // restore lr
-        self.code.add_imm(31, 31, stack_offset);
+        self.code.add_imm(31, 31, self.stack_offset);
         self.code.ret();
     }
 
@@ -272,6 +299,6 @@ impl<'a> HookGenerator<'a> {
         unsafe {
             hook.install(self.original.method.methodPointer.unwrap() as _, dest as _);
         }
-        self.code.copy_to(dest, hook.original().unwrap() as usize);
+        self.code.copy_to(dest, hook.original().unwrap() as usize, self.stack_offset);
     }
 }
