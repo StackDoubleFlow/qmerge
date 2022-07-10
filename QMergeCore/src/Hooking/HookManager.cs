@@ -42,7 +42,7 @@ namespace QMerge.Hooking
             if (original == null)
                 throw new Exception("could not find method to hook");
 
-            var methods = type.GetMethods();
+            var methods = type.GetMethods(AllLookupFlags);
             foreach (var methodInfo in methods)
             {
                 if (methodInfo.Name == "Postfix")

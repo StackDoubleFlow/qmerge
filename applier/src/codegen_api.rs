@@ -132,6 +132,12 @@ fn _Z6IsInstP12Il2CppObjectP11Il2CppClass(_: P, _: P) -> P;
 #[proxy_codegen_api]
 fn _Z25RaiseInvalidCastExceptionP12Il2CppObjectP11Il2CppClass(_: P, _: P);
 
+#[proxy_codegen_api]
+fn _Z14Unbox_internalP12Il2CppObject(_: P) -> P;
+
+#[proxy_codegen_api]
+fn _Z45il2cpp_codegen_raise_null_reference_exceptionv();
+
 // TODO: Maybe log and panic here instead of proxying call?
 #[proxy_codegen_api("_ZN6il2cpp2vm9Exception25GetMissingMethodExceptionEPKc")]
 fn _Z43il2cpp_codegen_get_missing_method_exceptionPKc(_: P) -> P;

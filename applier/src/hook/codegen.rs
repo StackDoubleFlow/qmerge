@@ -1,175 +1,277 @@
-use super::abi::ParameterStorage;
+use super::abi::{ParameterStorage, Arg};
+use super::alloc::HOOK_ALLOCATOR;
 use super::{CodegenMethod, ParamInjection};
 use crate::utils::get_fields;
 use std::collections::{HashMap, HashSet};
 use std::mem::transmute;
+use std::slice;
 use il2cpp_types::FieldInfo;
+use inline_hook::Hook;
 use tracing::debug;
+use std::fmt::Write;
+
+enum DataFixupInfo {
+    Addr(usize),
+    Orig,
+}
 
 /// Fix up an ldr with an offset to data
 struct DataFixup {
     ins_idx: usize,
-    data: usize,
+    info: DataFixupInfo,
 }
 
 #[derive(Default)]
-pub struct PostfixGenerator {
-    stack_offset: usize,
-    using_gprs: HashMap<u32, usize>,
-    using_fprs: HashMap<u32, usize>,
-
+struct Code {
     code: Vec<u32>,
     data: Vec<DataFixup>,
 }
 
-impl PostfixGenerator {
-    fn use_gpr(&mut self, num: u32) -> usize {
-        *self.using_gprs.entry(num).or_insert_with(|| {
-            let offset = self.stack_offset;
-            self.stack_offset += 8;
-            offset
-        })
-    }
-
-    fn use_fpr(&mut self, num: u32) -> usize {
-        *self.using_fprs.entry(num).or_insert_with(|| {
-            let offset = self.stack_offset;
-            self.stack_offset += 8;
-            offset
-        })
-    }
-
-    fn load_gpr(&mut self, num: u32, to: u32) {
-        let offset = self.use_gpr(num) as u32 / 8;
-        let ins = 0xf94003e0 | (offset << 10) | to;
-        self.code.push(ins); // ldr x<to>, [sp, #<offset>]
-    }
-
-    fn load_fpr(&mut self, num: u32, to: u32) {
-        let offset = self.use_fpr(num) as u32 / 8;
-        let ins = 0xfd4003e0 | (offset << 10) | to;
-        self.code.push(ins); // ldr d<to>, [sp, #<offset>]
-    }
-
+impl Code {
+    /// ldr x<dest>, [x<base>/sp, #<offset>]
     fn load_base_offset(&mut self, dest: u32, base: u32, offset: u32) {
         let offset = offset / 8;
         let ins = 0xf9400000 | (offset << 10) | (base << 5) | dest;
-        self.code.push(ins); // ldr x<dest> [x<base>, #<offset>]
+        self.code.push(ins);
     }
 
-    fn call_addr(&mut self, addr: usize) {
+    /// str x<src>, [x<base>/sp, #<offset>]
+    fn store_base_offset(&mut self, src: u32, base: u32, offset: u32) {
+        let offset = offset / 8;
+        let ins = 0xf9000000 | (offset << 10) | (base << 5) | src;
+        self.code.push(ins);
+    }
+
+    /// ldr d<dest>, [x<base>/sp, #<offset>]
+    fn load_base_offset_fp(&mut self, dest: u32, base: u32, offset: u32) {
+        let offset = offset / 8;
+        let ins = 0xfd400000 | (offset << 10) | (base << 5) | dest;
+        self.code.push(ins);
+    }
+
+    /// str d<src>, [x<base>/sp, #<offset>]
+    fn store_base_offset_fp(&mut self, src: u32, base: u32, offset: u32) {
+        let offset = offset / 8;
+        let ins = 0xfd000000 | (offset << 10) | (base << 5) | src;
+        self.code.push(ins);
+    }
+
+    /// add x<dest>, x<reg>, #<imm>
+    fn add_imm(&mut self, dest: u32, reg: u32, imm: u32) {
+        self.code.push(0x91000000 | (imm << 10) | (reg << 5) | dest);
+    }
+
+    /// sub x<dest>, x<reg>, #<imm>
+    fn sub_imm(&mut self, dest: u32, reg: u32, imm: u32) {
+        self.code.push(0xd1000000 | (imm << 10) | (reg << 5) | dest);
+    }
+
+    fn ret(&mut self) {
+        self.code.push(0xd65f03c0);
+    }
+
+    fn push_front(&mut self, other: Code) {
+        if !other.data.is_empty() {
+            todo!();
+        }
+        for fixup in &mut self.data {
+            fixup.ins_idx += other.code.len();
+        }
+        self.code.splice(0..0, other.code);
+    }
+
+    fn call_addr(&mut self, addr: Option<usize>) {
         self.data.push(DataFixup {
-            data: addr,
             ins_idx: self.code.len(),
+            info: match addr {
+                Some(addr) => DataFixupInfo::Addr(addr),
+                None => DataFixupInfo::Orig,
+            }
         });
         self.code.push(0x58000009); // ldr x9, 0x0
         self.code.push(0xd63f0120); // blr x9
     }
 
-    fn push_code_front(&mut self, code: Vec<u32>) {
-        for fixup in &mut self.data {
-            fixup.ins_idx += code.len();
-        }
-        self.code.splice(0..0, code);
+    fn size(&self) -> usize {
+        self.code.len() + self.data.len() * 2
     }
 
-    fn write_prologue_epilogue(&mut self) {
-        self.use_gpr(30);
-        let mut prologue = Vec::new();
+    fn copy_to(&mut self, dest: *mut u32, orig_addr: usize) {
+        let fixup_data = self.data.iter().map(|fixup| {
+            (
+                fixup.ins_idx,
+                match fixup.info {
+                    DataFixupInfo::Addr(addr) => addr,
+                    DataFixupInfo::Orig => orig_addr,
+                }
+            )
+        }).collect::<Vec<_>>();
 
-        let stack_offset = (self.stack_offset as u32 + 15) & !15;
-        prologue.push(0xd10003ff | (stack_offset << 10)); // sub sp, sp, #<stack_offset>
-
-        for (&gpr, &offset) in &self.using_gprs {
-            let offset = offset as u32 / 8;
-            let ins = 0xf90003e0 | (offset << 10) | gpr;
-            prologue.push(ins);
-        }
-        for (&fpr, &offset) in &self.using_fprs {
-            let offset = offset as u32 / 8;
-            let ins = 0xfd0003e0 | (offset << 10) | fpr;
-            prologue.push(ins);
+        for (i, &(ins_idx, _)) in fixup_data.iter().enumerate() {
+            let offset = ((self.code.len() - ins_idx) + i * 2) as u32;
+            self.code[ins_idx] |= offset << 5;
         }
 
-        self.push_code_front(prologue);
+        let code_slice = unsafe {
+            slice::from_raw_parts_mut(dest, self.code.len())
+        };
+        code_slice.copy_from_slice(&self.code);
 
-        self.load_gpr(30, 30);
-        self.code.push(0x910003ff | (stack_offset << 10)); // add sp, sp, #<stack_offset>
-        self.code.push(0xd65f03c0); // ret
+        let data_ptr = unsafe { dest.add(self.code.len()) } as *mut usize;
+        for (i, &(_, data)) in fixup_data.iter().enumerate() {
+            unsafe {
+                data_ptr.add(i).write(data);
+            }
+        }
+
+
+        debug!("dumping generated code");
+        for ins in &code_slice[0..self.code.len()] {
+            let ptr = ins as *const u32;
+            debug!("{:?}: {}", ptr, bad64::decode(*ins, ptr as u64).unwrap());
+        }
+        let mut data_str = String::from("data: ");
+        for i in 0..self.data.len() {
+            let data = unsafe { data_ptr.add(i).read() };
+            let bytes: [u8; 8] = data.to_ne_bytes();
+            for b in bytes {
+                write!(data_str, "{:02x}", b).unwrap();
+            }
+        }
+        debug!("{}", data_str);
+    }
+}
+
+pub struct HookGenerator<'a> {
+    original: &'a CodegenMethod,
+    orig_param_offsets: Vec<u32>,
+    instance_param_offset: Option<u32>,
+    stack_offset: u32,
+    code: Code,
+}
+
+impl<'a> HookGenerator<'a> {
+    pub(super) fn new(original: &CodegenMethod, is_instance: bool, reserve_call_stack: u32) -> HookGenerator {
+        let max_param_spill = reserve_call_stack.max(original.layout.stack_size);
+        let mut stack_offset = max_param_spill;
+        let mut param_offsets = Vec::new();
+        let instance_offset = if is_instance {
+            Some(stack_offset)
+        } else {
+            None
+        };
+        let mut code = Code::default();
+        for arg in &original.layout.args {
+            param_offsets.push(stack_offset);
+            // let ty = arg.ty;
+            match arg.storage {
+                ParameterStorage::GPReg(reg) => {
+                    if arg.ptr {
+                        todo!("copy structure to stack")
+                    }
+                    code.store_base_offset(reg, 31, stack_offset);
+                    stack_offset += 8;
+                }
+                ParameterStorage::VectorRange(start, count) => {
+                    for reg in start..start + count {
+                        code.store_base_offset_fp(reg, 31, stack_offset);
+                        stack_offset += 8;
+                    }
+                }
+                _ => todo!(),
+            }
+        }
+
+        HookGenerator {
+            original,
+            orig_param_offsets: param_offsets,
+            instance_param_offset: instance_offset,
+            stack_offset,
+            code,
+        }
     }
 
-    fn inject_field(&mut self, field: &FieldInfo, storage: &ParameterStorage) {
-        match storage {
-            ParameterStorage::GPReg(num) => {
-                // instance param
-                self.load_gpr(0, *num);
-                self.load_base_offset(*num, 0, field.offset as u32);
+    fn load_orig_param(&mut self, num: usize, to: &Arg) {
+        let offset = self.orig_param_offsets[num];
+        match to.storage {
+            ParameterStorage::GPReg(reg) => {
+                self.code.load_base_offset(reg, 31, offset);
+            }
+            ParameterStorage::VectorRange(start, count) => {
+                for i in 0..count {
+                    self.code.load_base_offset_fp(start + i, 31, offset + i * 8);
+                }
             }
             _ => todo!(),
         }
     }
 
-    fn inject_param(&mut self, orig_storage: &ParameterStorage, storage: &ParameterStorage) {
-        match (orig_storage, storage) {
-            // gpr -> gpr
-            (
-                ParameterStorage::GPReg(orig_num),
-                ParameterStorage::GPReg(num),
-            ) => {
-                self.load_gpr(*orig_num, *num)
+    pub fn call_orig(&mut self) {
+        for i in 0..self.original.params.len() {
+            self.load_orig_param(i, &self.original.layout.args[i])
+        }
+        self.code.call_addr(None);
+    }
+
+    fn inject_field(&mut self, field: &FieldInfo, arg: &Arg) {
+        match arg.storage {
+            ParameterStorage::GPReg(num) => {
+                // instance param
+                self.code.load_base_offset(num, 31, self.instance_param_offset.unwrap());
+                if arg.ptr {
+                    self.code.add_imm(num, num, field.offset as u32)
+                } else {
+                    self.code.load_base_offset(num, num, field.offset as u32);
+                }
             }
-            // fpr -> fpr
-            (
-                ParameterStorage::VectorReg(orig_num),
-                ParameterStorage::VectorReg(num),
-            ) => {
-                self.load_fpr(*orig_num, *num)
-            }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
-    pub(super) fn gen_postfix(
-        &mut self,
-        original: CodegenMethod,
-        postfix: CodegenMethod,
-        injections: Vec<ParamInjection>,
-    ) {
-        // Call original, this fixup gets fixed
-        self.call_addr(0);
-
-        for (injection, storage) in injections.iter().zip(postfix.layout.iter()) {
+    pub(super) fn gen_postfix(&mut self, postfix: CodegenMethod, injections: Vec<ParamInjection>) {
+        for (injection, arg) in injections.iter().zip(postfix.layout.args.iter()) {
             match injection {
                 ParamInjection::LoadField(idx) => {
-                    let fields = unsafe { get_fields(original.method.klass) };
+                    let fields = unsafe { get_fields(self.original.method.klass) };
                     let field = &fields[*idx];
-                    self.inject_field(field, storage);
+                    self.inject_field(field, arg);
                 }
                 ParamInjection::OriginalParam(idx) => {
-                    // let param = &original.params[*idx];
-                    let orig_storage = &original.layout[*idx];
-                    self.inject_param(orig_storage, storage);
+                    self.load_orig_param(*idx, arg);
                 }
                 ParamInjection::Instance => {
-                    self.load_gpr(0, 0);
+                    self.code.load_base_offset(0, 31, self.instance_param_offset.unwrap());
                 }
             }
         }
-        self.call_addr(postfix.method.methodPointer.unwrap() as usize);
+        self.code.call_addr(Some(postfix.method.methodPointer.unwrap() as usize));
     }
 
-    pub fn finish(mut self) -> (Vec<u32>, usize) {
+    fn write_prologue_epilogue(&mut self) {
+        let mut prologue = Code::default();
+        // save space for lr
+        let lr_offset = self.stack_offset;
+        self.stack_offset += 8;
+
+        let stack_offset = (self.stack_offset as u32 + 15) & !15;
+        prologue.sub_imm(31, 31, stack_offset);
+        prologue.store_base_offset(30, 31, lr_offset); // save lr
+        self.code.push_front(prologue);
+
+        self.code.load_base_offset(30, 31, lr_offset); // restore lr
+        self.code.add_imm(31, 31, stack_offset);
+        self.code.ret();
+    }
+
+    pub fn finish_and_install(mut self) {
         self.write_prologue_epilogue();
-        let code_len = self.code.len();
 
-        for (i, fixup) in self.data.iter().enumerate() {
-            let offset = ((code_len - fixup.ins_idx) + i * 2) as u32;
-            self.code[fixup.ins_idx] |= offset << 5;
-            let parts: [u32; 2] = unsafe { transmute(fixup.data) };
-            self.code.push(parts[0]);
-            self.code.push(parts[1]);
+        let dest = HOOK_ALLOCATOR.lock().unwrap().alloc(self.code.size());
+        
+        let hook = Hook::new();
+        unsafe {
+            hook.install(self.original.method.methodPointer.unwrap() as _, dest as _);
         }
-
-        (self.code, code_len)
+        self.code.copy_to(dest, hook.original().unwrap() as usize);
     }
 }

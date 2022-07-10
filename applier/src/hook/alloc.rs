@@ -34,16 +34,15 @@ pub struct HookAllocator {
 }
 
 impl HookAllocator {
-    pub fn alloc(&mut self, data: &[u32]) -> *const u32 {
-        if self.current_page.used + data.len() > *PAGE_SIZE {
+    pub fn alloc(&mut self, size: usize) -> *mut u32 {
+        if self.current_page.used + size > *PAGE_SIZE {
             let old_page = take(&mut self.current_page);
             self.old_pages.push(old_page);
         }
 
         let page = &mut self.current_page;
-        page.data[page.used..page.used + data.len()].clone_from_slice(data);
-        let ptr = &page.data[page.used] as *const u32;
-        page.used += data.len();
+        let ptr = &mut page.data[page.used] as *mut u32;
+        page.used += size;
         ptr
     }
 }

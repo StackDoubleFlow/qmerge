@@ -130,8 +130,9 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<u32> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ParameterStorage {
+    Unallocated,
     VectorReg(u32),
     // Copy fields to consecutive vector registers starting at v[.0] with count .1  (one register per member)
     VectorRange(u32, u32),
@@ -142,15 +143,23 @@ pub enum ParameterStorage {
     GPReg(u32),
 }
 
-struct Arg {
-    ty: &'static Il2CppType,
+pub struct Arg {
+    pub ty: &'static Il2CppType,
     // if the parameter was copied to memory and converted to a pointer
-    ptr: bool,
-    size: usize,
+    pub ptr: bool,
+    pub storage: ParameterStorage,
+    pub size: usize,
+}
+
+pub struct ParamLayout {
+    pub args: Vec<Arg>,
+    pub num_gprs: u32,
+    pub num_fprs: u32,
+    pub stack_size: u32,
 }
 
 /// The instance parameter doesn't get returned, but is always in x0
-pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<ParameterStorage> {
+pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> ParamLayout {
     // A.1: next gpr num
     let mut ngrn = 0;
     // A.2: next vector reg num
@@ -162,6 +171,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
     let mut args: Vec<_> = types
         .iter()
         .map(|&ty| Arg {
+            storage: ParameterStorage::Unallocated,
             ty,
             ptr: false,
             size: get_ty_size(ty),
@@ -188,8 +198,6 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         // B.6: alignment adjusted types?
     }
 
-    let mut storage = Vec::new();
-
     // Stage C
     if instance {
         // C.9
@@ -205,7 +213,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
 
         // C.1
         if is_fp_ty(ty_enum) && nsrn < 8 {
-            storage.push(ParameterStorage::VectorReg(nsrn));
+            arg.storage = ParameterStorage::VectorReg(nsrn);
             nsrn += 1;
             continue;
         }
@@ -213,19 +221,22 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         if let Some(num) = hfa {
             if nsrn + num <= 8 {
                 // C.2
-                storage.push(ParameterStorage::VectorRange(nsrn, num));
+                arg.storage = ParameterStorage::VectorRange(nsrn, num);
                 nsrn += num;
                 continue;
             } else {
                 nsrn = 8;
                 arg.size = (arg.size + 7) & !7;
                 // C.4
+                tracing::debug!(?nsaa);
                 let na = get_ty_class(ty).naturalAligment;
+                tracing::debug!(?na);
                 if na <= 8 {
                     nsaa = (nsaa + 7) & !7;
                 } else if na >= 16 {
                     nsaa = (nsaa + 15) & !15;
                 }
+                tracing::debug!(?nsaa);
             }
         }
         // C.5
@@ -234,7 +245,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         }
         // C.6
         if hfa.is_some() || is_fp_ty(ty_enum) {
-            storage.push(ParameterStorage::Stack(nsaa));
+            arg.storage = ParameterStorage::Stack(nsaa);
             nsaa += arg.size as u32;
             continue;
         }
@@ -242,7 +253,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         // C.8: see above
         // C.9
         if (is_integral_ty(ty_enum) || is_pointer_ty(ty_enum)) && arg.size <= 8 && ngrn < 8 {
-            storage.push(ParameterStorage::GPReg(ngrn));
+            arg.storage = ParameterStorage::GPReg(ngrn);
             ngrn += 1;
             continue;
         }
@@ -254,7 +265,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         // C.12
         let size_double_words = ((arg.size + 7) / 8) as u32;
         if is_composite_ty(ty_enum) && size_double_words <= 8 - ngrn {
-            storage.push(ParameterStorage::GPRRange(ngrn, size_double_words));
+            arg.storage = ParameterStorage::GPRRange(ngrn, size_double_words);
             ngrn += size_double_words;
             continue;
         }
@@ -269,7 +280,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
         nsaa = (nsaa + (stack_alignment - 1)) & !(stack_alignment - 1);
         // C.15
         if is_composite_ty(ty_enum) {
-            storage.push(ParameterStorage::Stack(nsaa));
+            arg.storage = ParameterStorage::Stack(nsaa);
             nsaa += arg.size as u32;
         }
         // C.16
@@ -277,9 +288,14 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Vec<P
             arg.size = 8;
         }
         // C.17
-        storage.push(ParameterStorage::Stack(nsaa));
+        arg.storage = ParameterStorage::Stack(nsaa);
         nsaa += arg.size as u32;
     }
 
-    storage
+    ParamLayout {
+        args,
+        num_gprs: ngrn,
+        num_fprs: nsrn,
+        stack_size: nsaa,
+    }
 }
