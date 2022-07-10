@@ -7,14 +7,15 @@ use crate::hook::codegen::HookGenerator;
 use crate::utils::get_fields;
 use anyhow::{bail, Result};
 use il2cpp_types::{
-    FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, MethodInfo, METHOD_ATTRIBUTE_STATIC, Il2CppTypeEnum_IL2CPP_TYPE_CLASS, Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE,
+    FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
+    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, MethodInfo, METHOD_ATTRIBUTE_STATIC,
 };
 use inline_hook::Hook;
 use std::ffi::CStr;
 use std::slice;
 use tracing::{debug, instrument};
 
-use self::abi::{ParameterStorage, ParamLayout};
+use self::abi::{ParamLayout, ParameterStorage};
 
 struct Param {
     name: &'static str,
@@ -97,7 +98,9 @@ pub unsafe fn create_postfix_hook(
             }
             let ty = &*param.ty;
 
-            if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS || (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE && ty.byref() != 0) {
+            if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS
+                || (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE && ty.byref() != 0)
+            {
                 // TODO: Verify type data
                 injections.push(ParamInjection::Instance);
             } else {
@@ -135,7 +138,6 @@ pub unsafe fn create_postfix_hook(
     gen.call_orig();
     gen.gen_postfix(postfix_codegen, injections);
     gen.finish_and_install();
-
 
     Ok(())
 }

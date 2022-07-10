@@ -1,14 +1,14 @@
-use super::abi::{ParameterStorage, Arg};
+use super::abi::{Arg, ParameterStorage};
 use super::alloc::HOOK_ALLOCATOR;
 use super::{CodegenMethod, ParamInjection};
 use crate::utils::get_fields;
-use std::collections::{HashMap, HashSet};
-use std::mem::transmute;
-use std::slice;
 use il2cpp_types::FieldInfo;
 use inline_hook::Hook;
-use tracing::{debug, instrument};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
+use std::mem::transmute;
+use std::slice;
+use tracing::{debug, instrument};
 
 enum DataFixupInfo {
     Addr(usize),
@@ -54,7 +54,7 @@ impl Code {
         let ins = match size {
             8 => 0xfd400000,
             4 => 0xbd400000,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         let ins = ins | (offset << 10) | (base << 5) | dest;
         self.code.push(ins);
@@ -66,7 +66,7 @@ impl Code {
         let ins = match size {
             8 => 0xfd000000,
             4 => 0xbd000000,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         let ins = ins | (offset << 10) | (base << 5) | src;
         self.code.push(ins);
@@ -93,7 +93,9 @@ impl Code {
         for fixup in &mut self.data {
             fixup.ins_idx += other.code.len();
         }
-        self.param_spill_fixups.iter_mut().for_each(|idx| *idx += other.code.len());
+        self.param_spill_fixups
+            .iter_mut()
+            .for_each(|idx| *idx += other.code.len());
         self.code.splice(0..0, other.code);
     }
 
@@ -103,7 +105,7 @@ impl Code {
             info: match addr {
                 Some(addr) => DataFixupInfo::Addr(addr),
                 None => DataFixupInfo::Orig,
-            }
+            },
         });
         self.code.push(0x58000009); // ldr x9, 0x0
         self.code.push(0xd63f0120); // blr x9
@@ -119,24 +121,26 @@ impl Code {
             self.code[ins_idx] += stack_size_offset << 10;
         }
 
-        let fixup_data = self.data.iter().map(|fixup| {
-            (
-                fixup.ins_idx,
-                match fixup.info {
-                    DataFixupInfo::Addr(addr) => addr,
-                    DataFixupInfo::Orig => orig_addr,
-                }
-            )
-        }).collect::<Vec<_>>();
+        let fixup_data = self
+            .data
+            .iter()
+            .map(|fixup| {
+                (
+                    fixup.ins_idx,
+                    match fixup.info {
+                        DataFixupInfo::Addr(addr) => addr,
+                        DataFixupInfo::Orig => orig_addr,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
 
         for (i, &(ins_idx, _)) in fixup_data.iter().enumerate() {
             let offset = ((self.code.len() - ins_idx) + i * 2) as u32;
             self.code[ins_idx] |= offset << 5;
         }
 
-        let code_slice = unsafe {
-            slice::from_raw_parts_mut(dest, self.code.len())
-        };
+        let code_slice = unsafe { slice::from_raw_parts_mut(dest, self.code.len()) };
         code_slice.copy_from_slice(&self.code);
 
         let data_ptr = unsafe { dest.add(self.code.len()) } as *mut usize;
@@ -146,11 +150,15 @@ impl Code {
             }
         }
 
-
         debug!("dumping generated code");
         for ins in &code_slice[0..self.code.len()] {
             let ptr = ins as *const u32;
-            debug!("{:?}: {:08x}:  {}", ptr, *ins, bad64::decode(*ins, ptr as u64).unwrap());
+            debug!(
+                "{:?}: {:08x}:  {}",
+                ptr,
+                *ins,
+                bad64::decode(*ins, ptr as u64).unwrap()
+            );
         }
         let mut data_str = String::from("data: ");
         for i in 0..self.data.len() {
@@ -173,7 +181,11 @@ pub struct HookGenerator<'a> {
 }
 
 impl<'a> HookGenerator<'a> {
-    pub(super) fn new(original: &CodegenMethod, is_instance: bool, reserve_call_stack: u32) -> HookGenerator {
+    pub(super) fn new(
+        original: &CodegenMethod,
+        is_instance: bool,
+        reserve_call_stack: u32,
+    ) -> HookGenerator {
         let max_param_spill = reserve_call_stack.max(original.layout.stack_size);
         let mut stack_offset = max_param_spill;
         let mut param_offsets = Vec::new();
@@ -240,7 +252,8 @@ impl<'a> HookGenerator<'a> {
             ParameterStorage::VectorRange(start, count, is_double) => {
                 let size = is_double.then_some(8).unwrap_or(4);
                 for i in 0..count {
-                    self.code.load_base_offset_fp(start + i, 31, offset + i * size, size);
+                    self.code
+                        .load_base_offset_fp(start + i, 31, offset + i * size, size);
                 }
             }
             ParameterStorage::Stack(to_offset) => {
@@ -265,7 +278,8 @@ impl<'a> HookGenerator<'a> {
         match arg.storage {
             ParameterStorage::GPReg(num) => {
                 // instance param
-                self.code.load_base_offset(num, 31, self.instance_param_offset.unwrap());
+                self.code
+                    .load_base_offset(num, 31, self.instance_param_offset.unwrap());
                 if arg.ptr {
                     self.code.add_imm(num, num, field.offset as u32)
                 } else {
@@ -288,11 +302,13 @@ impl<'a> HookGenerator<'a> {
                     self.load_orig_param(*idx, arg);
                 }
                 ParamInjection::Instance => {
-                    self.code.load_base_offset(0, 31, self.instance_param_offset.unwrap());
+                    self.code
+                        .load_base_offset(0, 31, self.instance_param_offset.unwrap());
                 }
             }
         }
-        self.code.call_addr(Some(postfix.method.methodPointer.unwrap() as usize));
+        self.code
+            .call_addr(Some(postfix.method.methodPointer.unwrap() as usize));
     }
 
     fn write_prologue_epilogue(&mut self) {
@@ -315,11 +331,12 @@ impl<'a> HookGenerator<'a> {
         self.write_prologue_epilogue();
 
         let dest = HOOK_ALLOCATOR.lock().unwrap().alloc(self.code.size());
-        
+
         let hook = Hook::new();
         unsafe {
             hook.install(self.original.method.methodPointer.unwrap() as _, dest as _);
         }
-        self.code.copy_to(dest, hook.original().unwrap() as usize, self.stack_offset);
+        self.code
+            .copy_to(dest, hook.original().unwrap() as usize, self.stack_offset);
     }
 }
