@@ -147,9 +147,12 @@ pub unsafe fn create_hook(
         reserve_call_stack = reserve_call_stack.max(codegen.layout.stack_size);
     }
     let mut gen = HookGenerator::new(&original_codegen, is_instance, reserve_call_stack);
+    if let Some((codegen, injections)) = prefix_injections {
+        gen.gen_call_hook(codegen, injections);
+    }
     gen.call_orig();
     if let Some((codegen, injections)) = postfix_injections {
-        gen.gen_postfix(codegen, injections);
+        gen.gen_call_hook(codegen, injections);
     }
     gen.finish_and_install();
 

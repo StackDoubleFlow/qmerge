@@ -36,11 +36,33 @@ namespace MergeExample.Tests
         {
             if (a.Equals(A) && b.Equals(B) && c.Equals(C) && d.Equals(D))
             {
-                Debug.Log("HFADouble passed");
+                Debug.Log("HFADouble postfix passed");
             }
             else
             {
-                Debug.Log("HFADouble failed");
+                Debug.Log("HFADouble postfix failed");
+                Debug.Log("Found:");
+                a.Debug();
+                b.Debug();
+                c.Debug();
+                d.Debug();
+                Debug.Log("Expected");
+                A.Debug();
+                B.Debug();
+                C.Debug();
+                D.Debug();
+            }
+        }
+
+        private static void Prefix(HFA d, HFA c, HFA b, HFA a)
+        {
+            if (a.Equals(A) && b.Equals(B) && c.Equals(C) && d.Equals(D))
+            {
+                Debug.Log("HFADouble prefix passed");
+            }
+            else
+            {
+                Debug.Log("HFADouble prefix failed");
                 Debug.Log("Found:");
                 a.Debug();
                 b.Debug();
@@ -56,11 +78,12 @@ namespace MergeExample.Tests
 
         private static void Test(HFA a, HFA b, HFA c, HFA d)
         {
-            Debug.Log("Starting HFADouble with " + a + b + c + d);
+            Debug.Log("Running HFADouble with " + a + b + c + d);
         }
 
         public static void RunTest()
         {
+            Debug.Log("Starting HFADouble");
             Test(A, B, C, D);
         }
     }

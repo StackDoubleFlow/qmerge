@@ -293,8 +293,8 @@ impl<'a> HookGenerator<'a> {
         }
     }
 
-    pub(super) fn gen_postfix(&mut self, postfix: CodegenMethod, injections: Vec<ParamInjection>) {
-        for (injection, arg) in injections.iter().zip(postfix.layout.args.iter()) {
+    pub(super) fn gen_call_hook(&mut self, method: CodegenMethod, injections: Vec<ParamInjection>) {
+        for (injection, arg) in injections.iter().zip(method.layout.args.iter()) {
             match injection {
                 ParamInjection::LoadField(idx) => {
                     let fields = unsafe { get_fields(self.original.method.klass) };
@@ -311,7 +311,7 @@ impl<'a> HookGenerator<'a> {
             }
         }
         self.code
-            .call_addr(Some(postfix.method.methodPointer.unwrap() as usize));
+            .call_addr(Some(method.method.methodPointer.unwrap() as usize));
     }
 
     fn write_prologue_epilogue(&mut self) {
