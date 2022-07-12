@@ -19,6 +19,7 @@ pub struct ImageDescription {
 #[derive(Encode, Decode, Debug)]
 pub struct TypeDefDescription {
     pub image: ImageDescriptionIdx,
+    pub decl_type: Option<TypeDefDescriptionIdx>,
     pub name: String,
     pub namespace: String,
 }
@@ -148,6 +149,8 @@ pub struct AddedTypeDefinition {
     pub byval_type: TypeDescriptionIdx,
     pub byref_type: TypeDescriptionIdx,
 
+    // TODO: we should probably only have one of these decl type fields
+    pub declaring_type_def: Option<TypeDefDescriptionIdx>,
     pub declaring_type: Option<TypeDescriptionIdx>,
     pub parent_type: Option<TypeDescriptionIdx>,
     pub element_type: TypeDescriptionIdx,

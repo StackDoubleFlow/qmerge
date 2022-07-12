@@ -234,6 +234,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             byval_type: self.add_type(ty_def.byval_type_index)?,
             byref_type: self.add_type(ty_def.byref_type_index)?,
 
+            declaring_type_def: self.add_decl_ty(ty_def.declaring_type_index)?,
             declaring_type: self.add_type_optional(ty_def.declaring_type_index)?,
             parent_type: self.add_type_optional(ty_def.parent_index)?,
             element_type: self.add_type(ty_def.element_type_index)?,
@@ -336,6 +337,22 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(desc_idx)
     }
 
+    fn add_decl_ty(&mut self, idx: u32) -> Result<Option<usize>> {
+        Ok(match idx as i32 {
+            -1 => None,
+            _ => Some({
+                let ty = &self.runtime_metadata.types[idx as usize];
+                match ty.data {
+                    Il2CppTypeData::TypeDefIdx(idx) => {
+                        self.add_type_def(idx as u32)?
+                    }
+                    // TODO: Is this possible?
+                    _ => todo!("declaing type {:?}", ty.data)
+                }
+            })
+        })
+    }
+
     pub fn add_type_def(&mut self, idx: u32) -> Result<usize> {
         if self.type_def_map.contains_key(&idx) {
             return Ok(self.type_def_map[&idx]);
@@ -351,13 +368,14 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let name = get_str(self.metadata.string, type_def.name_index as usize)?;
         let namespace = get_str(self.metadata.string, type_def.namespace_index as usize)?;
 
-        let desc_idx = self.type_definitions.len();
         let desc = TypeDefDescription {
             image: self.add_image(image_idx)?,
+            decl_type: self.add_decl_ty(type_def.declaring_type_index)?,
             name: name.to_owned(),
             namespace: namespace.to_owned(),
         };
         self.type_definitions.push(desc);
+        let desc_idx = self.type_definitions.len() - 1;
         self.type_def_map.insert(idx, desc_idx);
         Ok(desc_idx)
     }

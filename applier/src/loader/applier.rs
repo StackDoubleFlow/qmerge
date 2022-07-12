@@ -298,11 +298,18 @@ struct FuncLutEntry {
     pub idx: usize,
 }
 
+#[derive(Hash, PartialEq, Eq, Debug)]
+struct TypeDefLookupKey {
+    namespace: String,
+    name: String,
+    decl_ty: Option<usize>,
+}
+
 pub struct ModLoader<'md> {
     metadata: &'md mut Metadata,
     pub code_registration: &'md mut CodeRegistrationBuilder,
     metadata_registration: &'md mut MetadataRegistrationBuilder,
-    image_type_def_map: Vec<HashMap<(String, String), usize>>,
+    image_type_def_map: Vec<HashMap<TypeDefLookupKey, usize>>,
     method_spec_map: HashMap<Il2CppMethodSpec, usize>,
     import_lut: ImportLut,
 }
@@ -318,10 +325,26 @@ impl<'md> ModLoader<'md> {
             let mut type_def_map = HashMap::with_capacity(image.typeCount as usize);
             let type_def_range = offset_len(image.typeStart, image.typeCount as i32);
             for (i, type_def) in metadata.type_definitions[type_def_range].iter().enumerate() {
+                let decl_ty = match type_def.declaringTypeIndex {
+                    -1 => None,
+                    ty_idx => unsafe {
+                        let ty = &*metadata_registration.types[ty_idx as usize];
+                        assert!(
+                            ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS
+                                || ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE
+                        );
+                        Some(ty.data.klassIndex as usize)
+                    },
+                };
+
                 let namespace = get_str(&metadata.string, type_def.namespaceIndex as usize)?;
                 let name = get_str(&metadata.string, type_def.nameIndex as usize)?;
                 type_def_map.insert(
-                    (namespace.to_string(), name.to_string()),
+                    TypeDefLookupKey {
+                        namespace: namespace.to_string(),
+                        name: name.to_string(),
+                        decl_ty,
+                    },
                     i + image.typeStart as usize,
                 );
             }
@@ -464,8 +487,12 @@ impl<'md> ModLoader<'md> {
         class: &str,
         name: &str,
     ) -> Result<Option<u32>> {
-        let type_def_idx =
-            self.image_type_def_map[image][&(namespace.to_string(), class.to_string())];
+        let lookup_key = TypeDefLookupKey {
+            namespace: namespace.to_string(),
+            name: class.to_string(),
+            decl_ty: None,
+        };
+        let type_def_idx = self.image_type_def_map[image][&lookup_key];
         let type_def = &self.metadata.type_definitions[type_def_idx];
 
         let methods_range = offset_len(type_def.methodStart, type_def.method_count as i32);
@@ -477,6 +504,101 @@ impl<'md> ModLoader<'md> {
         }
 
         Ok(None)
+    }
+
+    fn resolve_ty_def_refs(
+        &mut self,
+        mod_data: &MergeModData,
+        image_refs: &[usize],
+    ) -> Result<Vec<usize>> {
+        let mut added_type_defs = vec![false; mod_data.added_type_defintions.len()];
+        let mut type_def_map = HashMap::new();
+        let mod_image_idx = self.metadata.images.len() - 1;
+
+        let mut type_def_refs = vec![None; mod_data.type_def_descriptions.len()];
+
+        loop {
+            let mut did_something = false;
+            for (i, added) in added_type_defs.iter_mut().enumerate() {
+                if *added {
+                    continue;
+                }
+                let ty_def = &mod_data.added_type_defintions[i];
+                match ty_def.declaring_type_def {
+                    Some(decl_ty_def_ref_idx) => {
+                        if let Some(decl_ty) = type_def_refs[decl_ty_def_ref_idx] {
+                            type_def_map.insert(
+                                TypeDefLookupKey {
+                                    name: ty_def.name.to_string(),
+                                    namespace: ty_def.namespace.to_string(),
+                                    decl_ty: Some(decl_ty),
+                                },
+                                self.metadata.type_definitions.len() + i,
+                            );
+                            *added = true;
+                            did_something = true;
+                        }
+                    }
+                    None => {
+                        type_def_map.insert(
+                            TypeDefLookupKey {
+                                name: ty_def.name.to_string(),
+                                namespace: ty_def.namespace.to_string(),
+                                decl_ty: None,
+                            },
+                            self.metadata.type_definitions.len() + i,
+                        );
+                        *added = true;
+                        did_something = true;
+                    }
+                }
+            }
+
+            for i in 0..type_def_refs.len() {
+                if type_def_refs[i].is_some() {
+                    continue;
+                }
+                let ty_def_desc = &mod_data.type_def_descriptions[i];
+                let decl_ty = match ty_def_desc.decl_type {
+                    None => None,
+                    Some(decl_ty_def_ref_idx) => match type_def_refs[decl_ty_def_ref_idx] {
+                        Some(ty_def_idx) => Some(ty_def_idx),
+                        None => continue,
+                    },
+                };
+                let lookup_key = TypeDefLookupKey {
+                    name: ty_def_desc.name.to_string(),
+                    namespace: ty_def_desc.namespace.to_string(),
+                    decl_ty,
+                };
+                let image_idx = image_refs[ty_def_desc.image];
+                if image_idx == mod_image_idx {
+                    if let Some(&ty_def_idx) = type_def_map.get(&lookup_key) {
+                        type_def_refs[i] = Some(ty_def_idx);
+                        did_something = true;
+                    }
+                } else {
+                    match self.image_type_def_map[image_idx].get(&lookup_key) {
+                        Some(&ty_def_idx) => {
+                            type_def_refs[i] = Some(ty_def_idx);
+                            did_something = true;
+                        }
+                        None => bail!(
+                            "could not find external type definition {}.{}",
+                            ty_def_desc.namespace,
+                            ty_def_desc.name
+                        ),
+                    }
+                }
+            }
+
+            if !did_something {
+                break;
+            }
+        }
+
+        self.image_type_def_map.push(type_def_map);
+        Ok(type_def_refs.into_iter().map(|r| r.unwrap()).collect())
     }
 
     pub fn load_mod(&mut self, id: &str, mod_data: &MergeModData, lib: Arc<Library>) -> Result<()> {
@@ -501,6 +623,7 @@ impl<'md> ModLoader<'md> {
             customAttributeCount: 0,
         });
 
+        debug!("Resolving image references");
         let mut image_refs = Vec::new();
         for image_desc in &mod_data.image_descriptions {
             match self.find_image(&image_desc.name)? {
@@ -509,31 +632,8 @@ impl<'md> ModLoader<'md> {
             }
         }
 
-        self.image_type_def_map
-            .push(HashMap::with_capacity(mod_data.added_type_defintions.len()));
-        let type_def_map = self.image_type_def_map.last_mut().unwrap();
-        for (i, type_def) in mod_data.added_type_defintions.iter().enumerate() {
-            type_def_map.insert(
-                (type_def.namespace.to_string(), type_def.name.to_string()),
-                self.metadata.type_definitions.len() + i,
-            );
-        }
-
-        let type_def_refs = mod_data
-            .type_def_descriptions
-            .iter()
-            .map(|desc| {
-                self.image_type_def_map[image_refs[desc.image]]
-                    .get(&(desc.namespace.to_string(), desc.name.to_string()))
-                    .cloned()
-                    .with_context(|| {
-                        format!(
-                            "unresolved type reference: {}.{}",
-                            &desc.namespace, &desc.name
-                        )
-                    })
-            })
-            .collect::<Result<Vec<usize>>>()?;
+        debug!("Resolving type definition references");
+        let type_def_refs = self.resolve_ty_def_refs(mod_data, &image_refs)?;
 
         let mut ty_resolver = TypeResolver::new(mod_data, &type_def_refs);
 
