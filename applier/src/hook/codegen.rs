@@ -189,12 +189,15 @@ impl<'a> HookGenerator<'a> {
         let max_param_spill = reserve_call_stack.max(original.layout.stack_size);
         let mut stack_offset = max_param_spill;
         let mut param_offsets = Vec::new();
+        let mut code = Code::default();
         let instance_offset = if is_instance {
-            Some(stack_offset)
+            code.store_base_offset(0, 31, stack_offset);
+            let instance_offset = stack_offset;
+            stack_offset += 8;
+            Some(instance_offset)
         } else {
             None
         };
-        let mut code = Code::default();
         for arg in &original.layout.args {
             // We'll just align everything to 8 for now
             stack_offset = (stack_offset as u32 + 7) & !7;
@@ -227,7 +230,7 @@ impl<'a> HookGenerator<'a> {
                         stack_offset += 8;
                     }
                 }
-                _ => todo!(),
+                _ => todo!("parameter storage {:?}", arg.storage),
             }
         }
 
