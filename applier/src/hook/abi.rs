@@ -232,15 +232,12 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
                 nsrn = 8;
                 arg.size = (arg.size + 7) & !7;
                 // C.4
-                tracing::debug!(?nsaa);
                 let na = get_ty_class(ty).naturalAligment;
-                tracing::debug!(?na);
                 if na <= 8 {
                     nsaa = (nsaa + 7) & !7;
                 } else if na >= 16 {
                     nsaa = (nsaa + 15) & !15;
                 }
-                tracing::debug!(?nsaa);
             }
         }
         // C.5

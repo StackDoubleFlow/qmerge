@@ -14,7 +14,6 @@ use inline_hook::Hook;
 use std::ffi::CStr;
 use std::slice;
 use tracing::{debug, instrument};
-
 use self::abi::{ParamLayout, ParameterStorage};
 
 struct Param {
