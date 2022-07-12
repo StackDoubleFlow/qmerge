@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Reflection;
 using MergeExample;
+using MergeExample.Tests;
 using QMerge.Hooking;
 
 public class Plugin
