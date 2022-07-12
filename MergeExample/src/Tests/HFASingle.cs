@@ -56,7 +56,7 @@ namespace MergeExample.Tests
 
         private static void Test(HFA a, HFA b, HFA c, HFA d)
         {
-            Debug.Log("Starting HFASingle with " + a + b + c + d);
+            Debug.Log("Starting HFASingle" + a + b + c + d);
         }
 
         public static void RunTest()
