@@ -43,27 +43,40 @@ namespace QMerge.Hooking
                 throw new Exception("could not find method to hook");
 
             var methods = type.GetMethods(AllLookupFlags);
+            MethodInfo? prefix = null;
+            MethodInfo? postfix = null;
             foreach (var methodInfo in methods)
             {
-                if (methodInfo.Name == "Postfix")
+                switch (methodInfo.Name)
                 {
-                    CreatePostfixHook(original, methodInfo);
-                } 
-                else if (methodInfo.Name == "Prefix")
-                {
-                    CreatePrefixHook(original, methodInfo);
+                    case "Prefix":
+                    {
+                        if (prefix != null)
+                            Debug.LogWarning($"Found multiple postfixes in hook {type}");
+                        prefix = methodInfo;
+                        break;
+                    }
+                    case "Postfix":
+                    {
+                        if (postfix != null)
+                            Debug.LogWarning($"Found multiple prefixes in hook {type}");
+                        postfix = methodInfo;
+                        break;
+                    }
                 }
             }
+
+            if (postfix == null && prefix == null)
+            {
+                Debug.Log("Could not find prefix or postfix in hook {type}");
+                return;
+            }
+            CreateHookNative(original, prefix, postfix);
         }
 
-        private static void CreatePostfixHook(MethodInfo original, MethodInfo hook)
+        private static void CreateHookNative(MethodInfo original, MethodInfo? prefix, MethodInfo? postfix)
         {
-            NativeHelper.NativeStub(original, hook);
-        }
-        
-        private static void CreatePrefixHook(MethodInfo original, MethodInfo hook)
-        {
-            NativeHelper.NativeStub(original, hook);
+            NativeHelper.NativeStub(original, prefix, postfix);
         }
     }
 }

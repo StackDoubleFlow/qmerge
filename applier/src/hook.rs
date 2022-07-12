@@ -59,23 +59,19 @@ enum ParamInjection {
     Instance,
 }
 
-pub unsafe fn create_postfix_hook(
-    original_obj: *const Il2CppReflectionMethod,
-    postfix_obj: *const Il2CppReflectionMethod,
-) -> Result<()> {
-    let original_method = &*(*original_obj).method;
-    let original_params = get_params(original_method)?;
-
-    let postfix_method = &*(*postfix_obj).method;
-    let postfix_params = get_params(postfix_method)?;
-
-    if postfix_method.flags & METHOD_ATTRIBUTE_STATIC as u16 == 0 {
-        bail!("Postfix method must be static");
+unsafe fn get_injections(method_obj: *const Il2CppReflectionMethod, original_method: &MethodInfo, original_params: &[Param], is_instance: bool) -> Result<Option<(CodegenMethod, Vec<ParamInjection>)>> {
+    if method_obj.is_null() {
+        return Ok(None);
     }
-    let is_instance = (original_method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
+    let method = &*(*method_obj).method;
+    let params = get_params(method)?;
+
+    if method.flags & METHOD_ATTRIBUTE_STATIC as u16 == 0 {
+        bail!("Hook method must be static");
+    }
 
     let mut injections = Vec::new();
-    for param in &postfix_params {
+    for param in &params {
         if let Some(field_name) = param.name.strip_prefix("___") {
             let idx = find_field(original_method.klass, field_name)?;
             match idx {
@@ -126,16 +122,35 @@ pub unsafe fn create_postfix_hook(
         }
     }
 
-    let original_codegen = CodegenMethod::new(original_method, original_params, is_instance);
-    let postfix_codegen = CodegenMethod::new(postfix_method, postfix_params, false);
+    let codegen = CodegenMethod::new(method, params, false);
+    Ok(Some((codegen, injections)))
+}
 
-    debug!("Injection: {:?}", injections);
-    // debug!("Original layout: {:?}", original_codegen.layout);
-    // debug!("Postfix layout: {:?}", postfix_codegen.layout);
-    let reserve_call_stack = postfix_codegen.layout.stack_size;
+pub unsafe fn create_hook(
+    original_obj: *const Il2CppReflectionMethod,
+    prefix_obj: *const Il2CppReflectionMethod,
+    postfix_obj: *const Il2CppReflectionMethod,
+) -> Result<()> {
+    let original_method = &*(*original_obj).method;
+    let original_params = get_params(original_method)?;
+
+    let is_instance = (original_method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
+    let prefix_injections = get_injections(prefix_obj, original_method, &original_params, is_instance)?;
+    let postfix_injections = get_injections(postfix_obj, original_method, &original_params, is_instance)?;
+    let original_codegen = CodegenMethod::new(original_method, original_params, is_instance);
+
+    let mut reserve_call_stack = 0;
+    if let Some((codegen, _)) = &prefix_injections {
+        reserve_call_stack = reserve_call_stack.max(codegen.layout.stack_size);
+    }
+    if let Some((codegen, _)) = &postfix_injections {
+        reserve_call_stack = reserve_call_stack.max(codegen.layout.stack_size);
+    }
     let mut gen = HookGenerator::new(&original_codegen, is_instance, reserve_call_stack);
     gen.call_orig();
-    gen.gen_postfix(postfix_codegen, injections);
+    if let Some((codegen, injections)) = postfix_injections {
+        gen.gen_postfix(codegen, injections);
+    }
     gen.finish_and_install();
 
     Ok(())

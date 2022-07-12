@@ -7,7 +7,7 @@ namespace QMerge.Natives
     {
         // We want this method to inline so the native proxy method is large enough to hook.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static void NativeStub(params object[] p)
+        internal static void NativeStub(params object?[] p)
         {
             throw new Exception("Hit native stub. An internal method was not replaced!");
         }
