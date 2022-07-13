@@ -5,7 +5,7 @@ mod codegen;
 use self::abi::{Arg, ParamLayout, ParameterStorage};
 use crate::hook::alloc::HOOK_ALLOCATOR;
 use crate::hook::codegen::HookGenerator;
-use crate::utils::get_fields;
+use crate::utils::{get_fields, get_ty_class};
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
@@ -53,11 +53,20 @@ unsafe fn field_ty_matches(field_ty: *const Il2CppType, injection_ty: *const Il2
         && field_ty.byref() == injection_ty.byref()
 }
 
+unsafe fn is_ref_of(ty: *const Il2CppType, original: *const Il2CppType) -> bool {
+    let ty = &*ty;
+    let original = &*original;
+
+    ty.data.dummy == original.data.dummy
+        && ty.type_() == original.type_()
+        && (ty.byref() != 0 && original.byref() == 0)
+}
+
 #[derive(Debug)]
 enum ParamInjection {
-    OriginalParam(usize),
-    LoadField(usize),
-    Result,
+    OriginalParam(usize, bool),
+    LoadField(usize, bool),
+    Result(bool),
     Instance,
 }
 
@@ -84,13 +93,14 @@ unsafe fn get_injections(
             match idx {
                 Some(idx) => {
                     let field_ty = get_fields(original_method.klass)[idx].type_;
-                    if !field_ty_matches(field_ty, param.ty) {
+                    let byref = is_ref_of(param.ty, field_ty);
+                    if !byref && !field_ty_matches(field_ty, param.ty) {
                         bail!(
                             "Field injection type mismatch on parameter \"{}\"",
                             param.name
                         );
                     }
-                    injections.push(ParamInjection::LoadField(idx))
+                    injections.push(ParamInjection::LoadField(idx, byref))
                 }
                 None => bail!("could not find field with name {}", field_name),
             }
@@ -100,10 +110,10 @@ unsafe fn get_injections(
             }
             let ty = &*param.ty;
 
-            if ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS
-                || (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE && ty.byref() != 0)
+            if (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS
+                || (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE && ty.byref() != 0))
+                && get_ty_class(ty) as *const _ == method.klass
             {
-                // TODO: Verify type data
                 injections.push(ParamInjection::Instance);
             } else {
                 bail!("type mismatch for instance parameter injection");
@@ -114,21 +124,23 @@ unsafe fn get_injections(
             {
                 bail!("cannot inject __result for method with void return type")
             }
-            if param.ty != original_method.return_type {
+            let byref = is_ref_of(original_method.return_type, param.ty);
+            if !byref && param.ty != original_method.return_type {
                 bail!("__result type mismatch");
             }
-            injections.push(ParamInjection::Result);
+            injections.push(ParamInjection::Result(byref));
         } else {
             let mut found = false;
             for (i, original_param) in original_params.iter().enumerate() {
                 if original_param.name == param.name {
+                    let byref = is_ref_of(param.ty, original_param.ty);
                     if original_param.ty != param.ty {
                         bail!(
                             "Parameter injection type mismatch on parameter \"{}\"",
                             param.name
                         );
                     }
-                    injections.push(ParamInjection::OriginalParam(i));
+                    injections.push(ParamInjection::OriginalParam(i, byref));
                     found = true;
                     break;
                 }

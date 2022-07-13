@@ -278,7 +278,21 @@ impl<'a> HookGenerator<'a> {
         }
     }
 
-    fn load_arg(&mut self, stack_offset: u32, to: &Arg) {
+    fn load_arg(&mut self, stack_offset: u32, to: &Arg, byref: bool) {
+        if byref {
+            match to.storage {
+                ParameterStorage::GPReg(reg) => {
+                    self.code.add_imm(reg, 31, stack_offset);
+                }
+                ParameterStorage::Stack(to_offset) => {
+                    self.code.add_imm(9, 31, stack_offset);
+                    self.code.store_base_offset(9, 31, to_offset);
+                }
+                _ => unreachable!(),
+            }
+            return;
+        }
+
         match to.storage {
             ParameterStorage::GPReg(reg) => {
                 if to.ptr {
@@ -308,9 +322,9 @@ impl<'a> HookGenerator<'a> {
         }
     }
 
-    fn load_orig_param(&mut self, num: usize, to: &Arg) {
+    fn load_orig_param(&mut self, num: usize, to: &Arg, byref: bool) {
         let offset = self.orig_param_offsets[num];
-        self.load_arg(offset, to);
+        self.load_arg(offset, to, byref);
     }
 
     pub fn call_orig(&mut self) {
@@ -318,7 +332,7 @@ impl<'a> HookGenerator<'a> {
             self.code.load_base_offset(0, 31, instance_offset);
         }
         for i in 0..self.original.params.len() {
-            self.load_orig_param(i, &self.original.layout.args[i])
+            self.load_orig_param(i, &self.original.layout.args[i], false)
         }
         self.code.call_addr(None);
         if let Some(ret_layout) = &self.original.ret_layout {
@@ -327,7 +341,20 @@ impl<'a> HookGenerator<'a> {
         }
     }
 
-    fn inject_field(&mut self, field: &FieldInfo, arg: &Arg) {
+    fn inject_field(&mut self, field: &FieldInfo, arg: &Arg, byref: bool) {
+        if byref {
+            match arg.storage {
+                ParameterStorage::GPReg(num) => {
+                    // instance param
+                    self.code
+                        .load_base_offset(num, 31, self.instance_param_offset.unwrap());
+                    self.code.add_imm(num, num, field.offset as u32)
+                }
+                _ => todo!("byref field {:?}", arg.storage),
+            }
+            return;
+        }
+
         match arg.storage {
             ParameterStorage::GPReg(num) => {
                 // instance param
@@ -360,20 +387,20 @@ impl<'a> HookGenerator<'a> {
     pub(super) fn gen_call_hook(&mut self, method: CodegenMethod, injections: Vec<ParamInjection>) {
         for (injection, arg) in injections.iter().zip(method.layout.args.iter()) {
             match injection {
-                ParamInjection::LoadField(idx) => {
+                ParamInjection::LoadField(idx, byref) => {
                     let fields = unsafe { get_fields(self.original.method.klass) };
                     let field = &fields[*idx];
-                    self.inject_field(field, arg);
+                    self.inject_field(field, arg, *byref);
                 }
-                ParamInjection::OriginalParam(idx) => {
-                    self.load_orig_param(*idx, arg);
+                ParamInjection::OriginalParam(idx, byref) => {
+                    self.load_orig_param(*idx, arg, *byref);
                 }
                 ParamInjection::Instance => {
                     self.inject_instance(arg);
                 }
-                ParamInjection::Result => {
+                ParamInjection::Result(byref) => {
                     let offset = self.result_offset.unwrap();
-                    self.load_arg(offset, arg);
+                    self.load_arg(offset, arg, *byref);
                 }
             }
         }

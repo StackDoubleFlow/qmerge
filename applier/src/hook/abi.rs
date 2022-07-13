@@ -1,8 +1,7 @@
 // It doesn't like how the Il2CppTypeEnum values are named
 #![allow(non_upper_case_globals)]
 
-use crate::codegen_api::_ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi;
-use crate::utils::get_fields;
+use crate::utils::{get_fields, get_ty_class};
 use il2cpp_types::*;
 use std::mem::size_of;
 
@@ -14,7 +13,7 @@ fn is_fp_ty(ty: Il2CppTypeEnum) -> bool {
 }
 
 fn is_composite_ty(ty: Il2CppTypeEnum) -> bool {
-    matches!(ty, Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE)
+    ty == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE
 }
 
 fn is_integral_ty(ty: Il2CppTypeEnum) -> bool {
@@ -48,22 +47,15 @@ fn is_pointer_ty(ty: Il2CppTypeEnum) -> bool {
             | Il2CppTypeEnum_IL2CPP_TYPE_OBJECT
             | Il2CppTypeEnum_IL2CPP_TYPE_VAR
             | Il2CppTypeEnum_IL2CPP_TYPE_MVAR
+            | Il2CppTypeEnum_IL2CPP_TYPE_BYREF
     )
 }
 
-fn get_class_from_idx(idx: TypeDefinitionIndex) -> &'static Il2CppClass {
-    let ptr = _ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi(idx);
-    if ptr.is_null() {
-        panic!("tried to look up invalid type definition index");
-    }
-    unsafe { &*ptr }
-}
-
-fn get_ty_class(ty: &Il2CppType) -> &Il2CppClass {
-    get_class_from_idx(unsafe { ty.data.klassIndex })
-}
-
 fn get_ty_size(ty: &Il2CppType) -> usize {
+    if ty.byref() != 0 {
+        return 8;
+    }
+
     match ty.type_() {
         Il2CppTypeEnum_IL2CPP_TYPE_I1
         | Il2CppTypeEnum_IL2CPP_TYPE_U1
@@ -183,6 +175,9 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
 
     // Stage B
     for arg in &mut args {
+        if arg.ty.byref() != 0 {
+            continue;
+        }
         // B.1: We don't have scalable types
         // B.2: We always know the size of composite types
         // B.3
@@ -208,8 +203,11 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
     }
     for arg in &mut args {
         let ty = arg.ty;
+
         let ty_enum = if arg.ptr {
             Il2CppTypeEnum_IL2CPP_TYPE_PTR
+        } else if arg.ty.byref() != 0 {
+            Il2CppTypeEnum_IL2CPP_TYPE_BYREF
         } else {
             ty.type_()
         };
