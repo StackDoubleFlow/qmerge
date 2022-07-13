@@ -574,6 +574,7 @@ dependencies = [
  "inline_hook",
  "libc",
  "merge_data",
+ "ndk-sys",
  "paranoid-android",
  "serde",
  "serde_json",

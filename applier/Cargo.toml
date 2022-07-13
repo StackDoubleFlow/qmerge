@@ -28,6 +28,7 @@ anyhow = "1"
 applier_proc_macro = { path = "./proc_macro" }
 topological-sort = "0.1"
 libc = "0.2"
+ndk-sys = "0.3"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tracing-subscriber = { version = "0.3", features = [

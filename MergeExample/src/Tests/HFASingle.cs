@@ -28,7 +28,7 @@ namespace MergeExample.Tests
 
             public void Debug()
             {
-                UnityEngine.Debug.Log($"{a} {b} {c} {d}");
+                Plugin.Logger.Debug($"{a} {b} {c} {d}");
             }
         }
 
@@ -36,17 +36,17 @@ namespace MergeExample.Tests
         {
             if (a.Equals(A) && b.Equals(B) && c.Equals(C) && d.Equals(D))
             {
-                Debug.Log("HFASingle passed");
+                Plugin.Logger.Debug("HFASingle passed");
             }
             else
             {
-                Debug.Log("HFASingle failed");
-                Debug.Log("Found:");
+                Plugin.Logger.Debug("HFASingle failed");
+                Plugin.Logger.Debug("Found:");
                 a.Debug();
                 b.Debug();
                 c.Debug();
                 d.Debug();
-                Debug.Log("Expected");
+                Plugin.Logger.Debug("Expected");
                 A.Debug();
                 B.Debug();
                 C.Debug();
@@ -56,7 +56,7 @@ namespace MergeExample.Tests
 
         private static void Test(HFA a, HFA b, HFA c, HFA d)
         {
-            Debug.Log("Starting HFASingle" + a + b + c + d);
+            Plugin.Logger.Debug("Starting HFASingle" + a + b + c + d);
         }
 
         public static void RunTest()

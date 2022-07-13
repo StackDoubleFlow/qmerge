@@ -28,7 +28,7 @@ namespace MergeExample.Tests
 
             public void Debug()
             {
-                UnityEngine.Debug.Log($"{a} {b} {c} {d}");
+                Plugin.Logger.Debug($"{a} {b} {c} {d}");
             }
         }
 
@@ -36,17 +36,17 @@ namespace MergeExample.Tests
         {
             if (a.Equals(A) && b.Equals(B) && c.Equals(C) && d.Equals(D))
             {
-                Debug.Log("HFADouble postfix passed");
+                Plugin.Logger.Debug("HFADouble postfix passed");
             }
             else
             {
-                Debug.Log("HFADouble postfix failed");
-                Debug.Log("Found:");
+                Plugin.Logger.Debug("HFADouble postfix failed");
+                Plugin.Logger.Debug("Found:");
                 a.Debug();
                 b.Debug();
                 c.Debug();
                 d.Debug();
-                Debug.Log("Expected");
+                Plugin.Logger.Debug("Expected");
                 A.Debug();
                 B.Debug();
                 C.Debug();
@@ -58,17 +58,17 @@ namespace MergeExample.Tests
         {
             if (a.Equals(A) && b.Equals(B) && c.Equals(C) && d.Equals(D))
             {
-                Debug.Log("HFADouble prefix passed");
+                Plugin.Logger.Debug("HFADouble prefix passed");
             }
             else
             {
-                Debug.Log("HFADouble prefix failed");
-                Debug.Log("Found:");
+                Plugin.Logger.Debug("HFADouble prefix failed");
+                Plugin.Logger.Debug("Found:");
                 a.Debug();
                 b.Debug();
                 c.Debug();
                 d.Debug();
-                Debug.Log("Expected");
+                Plugin.Logger.Debug("Expected");
                 A.Debug();
                 B.Debug();
                 C.Debug();
@@ -78,12 +78,12 @@ namespace MergeExample.Tests
 
         private static void Test(HFA a, HFA b, HFA c, HFA d)
         {
-            Debug.Log("Running HFADouble with " + a + b + c + d);
+            Plugin.Logger.Debug("Running HFADouble with " + a + b + c + d);
         }
 
         public static void RunTest()
         {
-            Debug.Log("Starting HFADouble");
+            Plugin.Logger.Debug("Starting HFADouble");
             Test(A, B, C, D);
         }
     }
