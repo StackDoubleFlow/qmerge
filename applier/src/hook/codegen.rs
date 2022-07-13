@@ -29,6 +29,20 @@ struct Code {
 }
 
 impl Code {
+    /// stp x<src1>, x<src2>, [x<base>/sp, #<offset>]
+    fn store_pair(&mut self, src1: u32, src2: u32, base: u32, offset: u32) {
+        let offset = offset / 8;
+        let ins = 0xa9000000 | (offset << 15) | (base << 5) | src1 | (src2 << 10);
+        self.code.push(ins);
+    }
+
+    /// ldp x<dest1>, x<dest2>, [x<base>/sp, #<offset>]
+    fn load_pair(&mut self, dest1: u32, dest2: u32, base: u32, offset: u32) {
+        let offset = offset / 8;
+        let ins = 0xa9400000 | (offset << 15) | (base << 5) | dest1 | (dest2 << 10);
+        self.code.push(ins);
+    }
+
     /// ldr x<dest>, [x<base>/sp, #<offset>]
     fn load_base_offset(&mut self, dest: u32, base: u32, offset: u32) {
         let offset = offset / 8;
@@ -410,16 +424,17 @@ impl<'a> HookGenerator<'a> {
 
     fn write_prologue_epilogue(&mut self) {
         let mut prologue = Code::default();
-        // save space for lr
-        let lr_offset = self.stack_offset;
-        self.stack_offset += 8;
+        // save space for stack frame
+        let frame_offset = self.stack_offset;
+        self.stack_offset += 16;
 
         self.stack_offset = (self.stack_offset as u32 + 15) & !15;
         prologue.sub_imm(31, 31, self.stack_offset);
-        prologue.store_base_offset(30, 31, lr_offset); // save lr
+        prologue.store_pair(29, 30, 31, frame_offset);
+        prologue.add_imm(29, 31, frame_offset);
         self.code.push_front(prologue);
 
-        self.code.load_base_offset(30, 31, lr_offset); // restore lr
+        self.code.load_pair(29, 30, 31, frame_offset);
         self.code.add_imm(31, 31, self.stack_offset);
         self.code.ret();
     }
