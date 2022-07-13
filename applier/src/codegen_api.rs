@@ -1,4 +1,5 @@
 use crate::loader::{MODS, MOD_IMPORT_LUT};
+use crate::utils::get_method_pointer;
 use crate::xref;
 use anyhow::{ensure, Context, Result};
 use applier_proc_macro::proxy_codegen_api;
@@ -40,18 +41,6 @@ pub extern "C" fn merge_codegen_initialize_method(
     let usage_offset = MODS.lock().unwrap()[mod_id].refs.usage_list_offset;
 
     _Z32il2cpp_codegen_initialize_methodj((metadata_usage_idx + usage_offset) as u32);
-}
-
-fn get_method_pointer(image: *const Il2CppImage, token: u32) -> Result<unsafe extern "C" fn()> {
-    let rid = token & 0x00FFFFFF;
-    // let table = token & 0xFF000000;
-    ensure!(rid != 0);
-
-    let code_gen_module = unsafe { &*(*image).codeGenModule };
-    ensure!(rid <= code_gen_module.methodPointerCount);
-
-    unsafe { code_gen_module.methodPointers.add(rid as usize - 1).read() }
-        .context("method pointer was null")
 }
 
 pub(crate) extern "C" fn resolve_method_by_call_helper_addr(fn_addr: P) -> unsafe extern "C" fn() {

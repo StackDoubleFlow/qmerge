@@ -5,10 +5,10 @@ use crate::codegen_api::{
     _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass,
     _ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi,
 };
-use anyhow::Result;
+use anyhow::{Result, ensure, Context};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
-    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, TypeDefinitionIndex,
+    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, TypeDefinitionIndex, Il2CppImage,
 };
 use std::{slice, str};
 
@@ -60,4 +60,16 @@ pub fn get_ty_class(ty: &Il2CppType) -> &Il2CppClass {
         Il2CppTypeEnum_IL2CPP_TYPE_CLASS | Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE
     ));
     get_class_from_idx(unsafe { ty.data.klassIndex })
+}
+
+pub fn get_method_pointer(image: *const Il2CppImage, token: u32) -> Result<unsafe extern "C" fn()> {
+    let rid = token & 0x00FFFFFF;
+    // let table = token & 0xFF000000;
+    ensure!(rid != 0);
+
+    let code_gen_module = unsafe { &*(*image).codeGenModule };
+    ensure!(rid <= code_gen_module.methodPointerCount);
+
+    unsafe { code_gen_module.methodPointers.add(rid as usize - 1).read() }
+        .context("method pointer was null")
 }

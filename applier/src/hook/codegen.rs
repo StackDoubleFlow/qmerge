@@ -1,7 +1,7 @@
 use super::abi::{Arg, ParameterStorage};
 use super::alloc::HOOK_ALLOCATOR;
 use super::{CodegenMethod, ParamInjection};
-use crate::utils::get_fields;
+use crate::utils::{get_fields, get_method_pointer};
 use il2cpp_types::FieldInfo;
 use inline_hook::Hook;
 use std::collections::{HashMap, HashSet};
@@ -47,6 +47,20 @@ impl Code {
     fn load_base_offset(&mut self, dest: u32, base: u32, offset: u32) {
         let offset = offset / 8;
         let ins = 0xf9400000 | (offset << 10) | (base << 5) | dest;
+        self.code.push(ins);
+    }
+
+    /// ldr x<dest>, [x<base>/sp, #<offset>]
+    fn load_sized(&mut self, dest: u32, base: u32, offset: u32, size: usize) {
+        let offset = offset / size as u32;
+        let ins = match size {
+            8 => 0xf9400000,
+            4 => 0xb9400000,
+            2 => 0x79400000,
+            1 => 0x39400000,
+            _ => unreachable!("load sized {}", size),
+        };
+        let ins = ins | (offset << 10) | (base << 5) | dest;
         self.code.push(ins);
     }
 
@@ -188,6 +202,7 @@ impl Code {
 
 pub struct HookGenerator<'a> {
     original: &'a CodegenMethod,
+    valuetype_instance: bool,
     orig_param_offsets: Vec<u32>,
     instance_param_offset: Option<u32>,
     result_offset: Option<u32>,
@@ -205,6 +220,7 @@ impl<'a> HookGenerator<'a> {
 
         let mut hook_gen = HookGenerator {
             original,
+            valuetype_instance: unsafe { &*original.method.klass }.valuetype() != 0,
             orig_param_offsets: Vec::new(),
             instance_param_offset: None,
             result_offset: None,
@@ -369,15 +385,21 @@ impl<'a> HookGenerator<'a> {
             return;
         }
 
+        let mut field_offset = field.offset;
+        if self.valuetype_instance {
+            // we don't have to worry about boxing
+            field_offset -= 0x10;
+        }
+
         match arg.storage {
             ParameterStorage::GPReg(num) => {
                 // instance param
                 self.code
                     .load_base_offset(num, 31, self.instance_param_offset.unwrap());
                 if arg.ptr {
-                    self.code.add_imm(num, num, field.offset as u32)
+                    self.code.add_imm(num, num, field_offset as u32)
                 } else {
-                    self.code.load_base_offset(num, num, field.offset as u32);
+                    self.code.load_sized(num, num, field_offset as u32, arg.size);
                 }
             }
             _ => todo!(),
@@ -445,8 +467,9 @@ impl<'a> HookGenerator<'a> {
         let dest = HOOK_ALLOCATOR.lock().unwrap().alloc(self.code.size());
 
         let hook = Hook::new();
+        let orig_ptr = get_method_pointer(unsafe { &*self.original.method.klass }.image, self.original.method.token).unwrap();
         unsafe {
-            hook.install(self.original.method.methodPointer.unwrap() as _, dest as _);
+            hook.install(orig_ptr as _, dest as _);
         }
         self.code
             .copy_to(dest, hook.original().unwrap() as usize, self.stack_offset);
