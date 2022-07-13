@@ -6,6 +6,7 @@ namespace MergeExample.Tests
         {
             HFASingle.RunTest();
             HFADouble.RunTest();
+            FieldInjection.RunTest();
         }
     }
 }
