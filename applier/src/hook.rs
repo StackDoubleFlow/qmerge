@@ -9,7 +9,8 @@ use crate::utils::get_fields;
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
-    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, MethodInfo, METHOD_ATTRIBUTE_STATIC, Il2CppTypeEnum_IL2CPP_TYPE_VOID,
+    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, Il2CppTypeEnum_IL2CPP_TYPE_VOID, MethodInfo,
+    METHOD_ATTRIBUTE_STATIC,
 };
 use inline_hook::Hook;
 use std::ffi::CStr;
@@ -108,7 +109,9 @@ unsafe fn get_injections(
                 bail!("type mismatch for instance parameter injection");
             }
         } else if param.name == "__result" {
-            if original_method.return_type.is_null() || (*original_method.return_type).type_() == Il2CppTypeEnum_IL2CPP_TYPE_VOID {
+            if original_method.return_type.is_null()
+                || (*original_method.return_type).type_() == Il2CppTypeEnum_IL2CPP_TYPE_VOID
+            {
                 bail!("cannot inject __result for method with void return type")
             }
             if param.ty != original_method.return_type {
@@ -186,7 +189,9 @@ impl CodegenMethod {
     fn new(method: &'static MethodInfo, params: Vec<Param>, is_instance: bool) -> Self {
         let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty }).collect();
         let layout = abi::layout_parameters(is_instance, &param_types);
-        let ret_layout = if method.return_type.is_null() || unsafe { *method.return_type }.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VOID {
+        let ret_layout = if method.return_type.is_null()
+            || unsafe { *method.return_type }.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VOID
+        {
             None
         } else {
             Some(

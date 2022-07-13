@@ -4,13 +4,13 @@
 
 mod asm;
 mod codegen_api;
+mod data_dirs;
 mod hook;
 mod loader;
 mod natives;
 mod setup;
 mod utils;
 mod xref;
-mod data_dirs;
 
 use anyhow::Result;
 use loader::MOD_INIT_FNS;

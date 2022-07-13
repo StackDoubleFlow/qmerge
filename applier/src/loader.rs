@@ -1,8 +1,8 @@
 mod applier;
 pub mod metadata_builder;
 
-use crate::natives::NATIVE_MAP;
 use crate::data_dirs::{EXEC_PATH, MOD_DATA_PATH};
+use crate::natives::NATIVE_MAP;
 use crate::xref;
 use anyhow::{anyhow, Context, Result};
 use applier::ModLoader;
