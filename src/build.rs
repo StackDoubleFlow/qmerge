@@ -400,7 +400,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
                     function_usages
                         .forward_decls
                         .insert(fn_def.name, line.trim_end_matches(';'));
-                } else {
+                } else if !fn_def.name.ends_with("_AdjustorThunk") {
                     lines.next().unwrap();
                     if fn_def.inline {
                         metadata_usage_names.insert(fn_def.name.trim_end_matches("_inline").to_string() + src_name);
