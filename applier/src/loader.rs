@@ -2,7 +2,7 @@ mod applier;
 pub mod metadata_builder;
 
 use crate::natives::NATIVE_MAP;
-use crate::utils::{get_exec_path, get_mod_data_path};
+use crate::data_dirs::{EXEC_PATH, MOD_DATA_PATH};
 use crate::xref;
 use anyhow::{anyhow, Context, Result};
 use applier::ModLoader;
@@ -165,7 +165,7 @@ fn load_mods(
 ) -> Result<()> {
     let mut mods = Vec::new();
 
-    for entry in fs::read_dir(get_mod_data_path().join("Mods"))? {
+    for entry in fs::read_dir(MOD_DATA_PATH.join("Mods"))? {
         let mod_dir = entry?;
         let id = mod_dir
             .file_name()
@@ -178,7 +178,7 @@ fn load_mods(
         let mmd = MergeModData::deserialize(&mmd).context("failed to deserialize mod data")?;
 
         file_path.set_extension("so");
-        let so_path = get_exec_path().join(file_path.file_name().unwrap());
+        let so_path = EXEC_PATH.join(file_path.file_name().unwrap());
         fs::copy(file_path, &so_path)?;
         let lib = Library::open(so_path).context("failed to open mod executable")?;
         let lib = Arc::new(lib);

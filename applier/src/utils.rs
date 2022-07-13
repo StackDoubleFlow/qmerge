@@ -4,16 +4,6 @@ use il2cpp_types::{FieldInfo, Il2CppClass};
 use std::path::PathBuf;
 use std::{slice, str};
 
-pub fn get_mod_data_path() -> PathBuf {
-    // TODO
-    PathBuf::from("/sdcard/ModData/com.beatgames.beatsaber/Mods/QMerge")
-}
-
-pub fn get_exec_path() -> PathBuf {
-    // TODO
-    PathBuf::from("/data/data/com.beatgames.beatsaber")
-}
-
 pub fn offset_len(offset: i32, len: i32) -> std::ops::Range<usize> {
     if (offset as i32) < 0 {
         return 0..0;

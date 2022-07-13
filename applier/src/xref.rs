@@ -1,5 +1,6 @@
+use crate::data_dirs::MOD_DATA_PATH;
 use crate::loader::metadata_builder::{CodeRegistrationBuilder, Metadata};
-use crate::utils::{get_mod_data_path, get_str, offset_len};
+use crate::utils::{get_str, offset_len};
 use anyhow::{anyhow, bail, Context, Result};
 use bad64::{Imm, Instruction, Op, Operand};
 use dlopen::raw::Library;
@@ -13,7 +14,7 @@ use tracing::debug;
 static LIBIL2CPP: LazyLock<Library> = LazyLock::new(|| Library::open("libil2cpp.so").unwrap());
 
 static XREF_DATA: LazyLock<XRefData> = LazyLock::new(|| {
-    let path = get_mod_data_path().join("xref_gen.json");
+    let path = MOD_DATA_PATH.join("xref_gen.json");
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 });
 static XREF_ROOTS: OnceLock<HashMap<(String, String, String), Il2CppRoot>> = OnceLock::new();
