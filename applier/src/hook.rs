@@ -2,6 +2,7 @@ mod abi;
 mod alloc;
 mod codegen;
 
+use self::abi::{Arg, ParamLayout, ParameterStorage};
 use crate::hook::alloc::HOOK_ALLOCATOR;
 use crate::hook::codegen::HookGenerator;
 use crate::utils::get_fields;
@@ -14,7 +15,6 @@ use inline_hook::Hook;
 use std::ffi::CStr;
 use std::slice;
 use tracing::{debug, instrument};
-use self::abi::{ParamLayout, ParameterStorage};
 
 struct Param {
     name: &'static str,
@@ -56,10 +56,16 @@ unsafe fn field_ty_matches(field_ty: *const Il2CppType, injection_ty: *const Il2
 enum ParamInjection {
     OriginalParam(usize),
     LoadField(usize),
+    Result,
     Instance,
 }
 
-unsafe fn get_injections(method_obj: *const Il2CppReflectionMethod, original_method: &MethodInfo, original_params: &[Param], is_instance: bool) -> Result<Option<(CodegenMethod, Vec<ParamInjection>)>> {
+unsafe fn get_injections(
+    method_obj: *const Il2CppReflectionMethod,
+    original_method: &MethodInfo,
+    original_params: &[Param],
+    is_instance: bool,
+) -> Result<Option<(CodegenMethod, Vec<ParamInjection>)>> {
     if method_obj.is_null() {
         return Ok(None);
     }
@@ -135,8 +141,10 @@ pub unsafe fn create_hook(
     let original_params = get_params(original_method)?;
 
     let is_instance = (original_method.flags & METHOD_ATTRIBUTE_STATIC as u16) == 0;
-    let prefix_injections = get_injections(prefix_obj, original_method, &original_params, is_instance)?;
-    let postfix_injections = get_injections(postfix_obj, original_method, &original_params, is_instance)?;
+    let prefix_injections =
+        get_injections(prefix_obj, original_method, &original_params, is_instance)?;
+    let postfix_injections =
+        get_injections(postfix_obj, original_method, &original_params, is_instance)?;
     let original_codegen = CodegenMethod::new(original_method, original_params, is_instance);
 
     let mut reserve_call_stack = 0;
@@ -163,16 +171,27 @@ struct CodegenMethod {
     method: &'static MethodInfo,
     params: Vec<Param>,
     layout: ParamLayout,
+    ret_layout: Option<Arg>,
 }
 
 impl CodegenMethod {
     fn new(method: &'static MethodInfo, params: Vec<Param>, is_instance: bool) -> Self {
         let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty }).collect();
         let layout = abi::layout_parameters(is_instance, &param_types);
+        let ret_layout = if method.return_type.is_null() {
+            None
+        } else {
+            Some(
+                abi::layout_parameters(false, &[unsafe { &*method.return_type }])
+                    .args
+                    .remove(0),
+            )
+        };
         Self {
             method,
             params,
             layout,
+            ret_layout,
         }
     }
 }

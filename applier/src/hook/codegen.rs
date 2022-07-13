@@ -176,6 +176,7 @@ pub struct HookGenerator<'a> {
     original: &'a CodegenMethod,
     orig_param_offsets: Vec<u32>,
     instance_param_offset: Option<u32>,
+    result_offset: Option<u32>,
     stack_offset: u32,
     code: Code,
 }
@@ -187,94 +188,143 @@ impl<'a> HookGenerator<'a> {
         reserve_call_stack: u32,
     ) -> HookGenerator {
         let max_param_spill = reserve_call_stack.max(original.layout.stack_size);
-        let mut stack_offset = max_param_spill;
-        let mut param_offsets = Vec::new();
-        let mut code = Code::default();
-        let instance_offset = if is_instance {
-            code.store_base_offset(0, 31, stack_offset);
-            let instance_offset = stack_offset;
-            stack_offset += 8;
-            Some(instance_offset)
-        } else {
-            None
+
+        let mut hook_gen = HookGenerator {
+            original,
+            orig_param_offsets: Vec::new(),
+            instance_param_offset: None,
+            result_offset: None,
+            stack_offset: max_param_spill,
+            code: Default::default(),
         };
-        for arg in &original.layout.args {
-            // We'll just align everything to 8 for now
-            stack_offset = (stack_offset as u32 + 7) & !7;
-            param_offsets.push(stack_offset);
-            // let ty = arg.ty;
-            match arg.storage {
-                ParameterStorage::GPReg(reg) => {
-                    if arg.ptr {
-                        todo!("copy structure to stack")
-                    }
-                    code.store_base_offset(reg, 31, stack_offset);
-                    stack_offset += 8;
-                }
-                ParameterStorage::VectorReg(reg) => {
-                    code.store_base_offset_fp(reg, 31, stack_offset, 8);
-                    stack_offset += 8;
-                }
-                ParameterStorage::VectorRange(start, count, is_double) => {
-                    for reg in start..start + count {
-                        let size = is_double.then_some(8).unwrap_or(4);
-                        code.store_base_offset_fp(reg, 31, stack_offset, size);
-                        stack_offset += size;
-                    }
-                }
-                ParameterStorage::Stack(offset) => {
-                    let count = arg.size / 8;
-                    for i in 0..count as u32 {
-                        code.load_spill(9, offset + i * 8);
-                        code.store_base_offset(9, 31, stack_offset);
-                        stack_offset += 8;
-                    }
-                }
-                _ => todo!("parameter storage {:?}", arg.storage),
-            }
+
+        if is_instance {
+            hook_gen
+                .code
+                .store_base_offset(0, 31, hook_gen.stack_offset);
+            let instance_offset = hook_gen.stack_offset;
+            hook_gen.stack_offset += 8;
+            hook_gen.instance_param_offset = Some(instance_offset);
         }
 
-        HookGenerator {
-            original,
-            orig_param_offsets: param_offsets,
-            instance_param_offset: instance_offset,
-            stack_offset,
-            code,
+        for arg in &original.layout.args {
+            let offset = hook_gen.alloc_arg_on_stack(arg);
+            hook_gen.store_arg(arg, offset);
+            hook_gen.orig_param_offsets.push(offset);
+        }
+
+        if let Some(ret_layout) = &original.ret_layout {
+            let offset = hook_gen.alloc_arg_on_stack(ret_layout);
+            hook_gen.result_offset = Some(offset);
+        }
+
+        hook_gen
+    }
+
+    fn alloc_arg_on_stack(&mut self, arg: &Arg) -> u32 {
+        // We'll just align everything to 8 for now
+        self.stack_offset = (self.stack_offset as u32 + 7) & !7;
+        let stack_offset = self.stack_offset;
+        match arg.storage {
+            ParameterStorage::GPReg(_) => {
+                if arg.ptr {
+                    todo!("get struct size");
+                }
+                self.stack_offset += 8;
+            }
+            ParameterStorage::VectorReg(_) => {
+                self.stack_offset += 8;
+            }
+            ParameterStorage::VectorRange(_, count, is_double) => {
+                let size = is_double.then_some(8).unwrap_or(4);
+                self.stack_offset += size * count;
+            }
+            ParameterStorage::Stack(_) => {
+                self.stack_offset += arg.size as u32;
+            }
+            ParameterStorage::Unallocated => unreachable!(),
+            _ => todo!("stack alloc storage {:?}", arg.storage),
+        }
+        stack_offset
+    }
+
+    fn store_arg(&mut self, arg: &Arg, stack_offset: u32) {
+        match arg.storage {
+            ParameterStorage::GPReg(reg) => {
+                if arg.ptr {
+                    todo!("copy structure to stack")
+                }
+                self.code.store_base_offset(reg, 31, stack_offset);
+            }
+            ParameterStorage::VectorReg(reg) => {
+                self.code.store_base_offset_fp(reg, 31, stack_offset, 8);
+            }
+            ParameterStorage::VectorRange(start, count, is_double) => {
+                for i in 0..count {
+                    let size = is_double.then_some(8).unwrap_or(4);
+                    self.code
+                        .store_base_offset_fp(start + i, 31, stack_offset + i * size, size);
+                }
+            }
+            ParameterStorage::Stack(offset) => {
+                let count = arg.size / 8;
+                for i in 0..count as u32 {
+                    self.code.load_spill(9, offset + i * 8);
+                    self.code.store_base_offset(9, 31, stack_offset + i * 8);
+                }
+            }
+            ParameterStorage::Unallocated => unreachable!(),
+            _ => todo!("store parameter storage {:?}", arg.storage),
         }
     }
 
-    fn load_orig_param(&mut self, num: usize, to: &Arg) {
-        let offset = self.orig_param_offsets[num];
+    fn load_arg(&mut self, stack_offset: u32, to: &Arg) {
         match to.storage {
             ParameterStorage::GPReg(reg) => {
-                self.code.load_base_offset(reg, 31, offset);
+                if to.ptr {
+                    todo!("load ptr");
+                }
+                self.code.load_base_offset(reg, 31, stack_offset);
             }
             ParameterStorage::VectorReg(reg) => {
-                self.code.load_base_offset_fp(reg, 31, offset, 8);
+                self.code.load_base_offset_fp(reg, 31, stack_offset, 8);
             }
             ParameterStorage::VectorRange(start, count, is_double) => {
                 let size = is_double.then_some(8).unwrap_or(4);
                 for i in 0..count {
-                    self.code
-                        .load_base_offset_fp(start + i, 31, offset + i * size, size);
+                    let offset = stack_offset + i * size;
+                    self.code.load_base_offset_fp(start + i, 31, offset, size);
                 }
             }
             ParameterStorage::Stack(to_offset) => {
                 let count = to.size / 8;
                 for i in 0..count as u32 {
-                    self.code.load_base_offset(9, 31, offset + i * 8);
+                    self.code.load_base_offset(9, 31, stack_offset + i * 8);
                     self.code.store_base_offset(9, 31, to_offset + i * 8);
                 }
             }
-            _ => todo!(),
+            ParameterStorage::Unallocated => unreachable!(),
+            _ => todo!("load parameter storage {:?}", to.storage),
         }
     }
 
+    fn load_orig_param(&mut self, num: usize, to: &Arg) {
+        let offset = self.orig_param_offsets[num];
+        self.load_arg(offset, to);
+    }
+
     pub fn call_orig(&mut self) {
+        if let Some(instance_offset) = self.instance_param_offset {
+            self.code.load_base_offset(0, 31, instance_offset);
+        }
         for i in 0..self.original.params.len() {
             self.load_orig_param(i, &self.original.layout.args[i])
         }
         self.code.call_addr(None);
+        if let Some(ret_layout) = &self.original.ret_layout {
+            let offset = self.result_offset.unwrap();
+            self.store_arg(ret_layout, offset);
+        }
     }
 
     fn inject_field(&mut self, field: &FieldInfo, arg: &Arg) {
@@ -293,6 +343,20 @@ impl<'a> HookGenerator<'a> {
         }
     }
 
+    fn inject_instance(&mut self, arg: &Arg) {
+        let offset = self.instance_param_offset.unwrap();
+        match arg.storage {
+            ParameterStorage::GPReg(reg) => {
+                self.code.load_base_offset(reg, 31, offset);
+            }
+            ParameterStorage::Stack(to_offset) => {
+                self.code.load_base_offset(9, 31, offset);
+                self.code.store_base_offset(9, 31, to_offset);
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub(super) fn gen_call_hook(&mut self, method: CodegenMethod, injections: Vec<ParamInjection>) {
         for (injection, arg) in injections.iter().zip(method.layout.args.iter()) {
             match injection {
@@ -305,8 +369,11 @@ impl<'a> HookGenerator<'a> {
                     self.load_orig_param(*idx, arg);
                 }
                 ParamInjection::Instance => {
-                    self.code
-                        .load_base_offset(0, 31, self.instance_param_offset.unwrap());
+                    self.inject_instance(arg);
+                }
+                ParamInjection::Result => {
+                    let offset = self.result_offset.unwrap();
+                    self.load_arg(offset, arg);
                 }
             }
         }
