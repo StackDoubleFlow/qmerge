@@ -9,7 +9,7 @@ use crate::utils::get_fields;
 use anyhow::{bail, Result};
 use il2cpp_types::{
     FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
-    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, MethodInfo, METHOD_ATTRIBUTE_STATIC,
+    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, MethodInfo, METHOD_ATTRIBUTE_STATIC, Il2CppTypeEnum_IL2CPP_TYPE_VOID,
 };
 use inline_hook::Hook;
 use std::ffi::CStr;
@@ -107,6 +107,14 @@ unsafe fn get_injections(
             } else {
                 bail!("type mismatch for instance parameter injection");
             }
+        } else if param.name == "__result" {
+            if original_method.return_type.is_null() || (*original_method.return_type).type_() == Il2CppTypeEnum_IL2CPP_TYPE_VOID {
+                bail!("cannot inject __result for method with void return type")
+            }
+            if !field_ty_matches(param.ty, original_method.return_type) {
+                bail!("__result type mismatch");
+            }
+            injections.push(ParamInjection::Result);
         } else {
             let mut found = false;
             for (i, original_param) in original_params.iter().enumerate() {
