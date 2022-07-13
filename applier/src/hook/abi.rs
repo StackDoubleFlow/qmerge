@@ -90,7 +90,7 @@ fn get_ty_size(ty: &Il2CppType) -> usize {
         Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE => {
             get_ty_class(ty).instance_size as usize - size_of::<Il2CppObject>()
         }
-        _ => unreachable!(),
+        type_ => unreachable!("size of type {}", type_),
     }
 }
 

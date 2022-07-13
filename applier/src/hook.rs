@@ -186,7 +186,7 @@ impl CodegenMethod {
     fn new(method: &'static MethodInfo, params: Vec<Param>, is_instance: bool) -> Self {
         let param_types: Vec<_> = params.iter().map(|param| unsafe { &*param.ty }).collect();
         let layout = abi::layout_parameters(is_instance, &param_types);
-        let ret_layout = if method.return_type.is_null() {
+        let ret_layout = if method.return_type.is_null() || unsafe { *method.return_type }.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VOID {
             None
         } else {
             Some(
