@@ -260,10 +260,10 @@ impl<'a> HookGenerator<'a> {
                 self.code.store_base_offset_fp(reg, 31, stack_offset, 8);
             }
             ParameterStorage::VectorRange(start, count, is_double) => {
+                let size = is_double.then_some(8).unwrap_or(4);
                 for i in 0..count {
-                    let size = is_double.then_some(8).unwrap_or(4);
-                    self.code
-                        .store_base_offset_fp(start + i, 31, stack_offset + i * size, size);
+                    let offset = stack_offset + i * size;
+                    self.code.store_base_offset_fp(start + i, 31, offset, size);
                 }
             }
             ParameterStorage::Stack(offset) => {
