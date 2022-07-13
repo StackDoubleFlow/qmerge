@@ -112,7 +112,7 @@ unsafe fn get_injections(
 
             if (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_CLASS
                 || (ty.type_() == Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE && ty.byref() != 0))
-                && get_ty_class(ty) as *const _ == method.klass
+                && get_ty_class(ty) as *const _ == original_method.klass
             {
                 injections.push(ParamInjection::Instance);
             } else {
