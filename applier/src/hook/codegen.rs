@@ -108,6 +108,19 @@ impl Code {
         self.code.push(0xd1000000 | (imm << 10) | (reg << 5) | dest);
     }
 
+    fn mov_imm(&mut self, dest: u32, imm: u32) {
+        self.code.push(0xd2800000 | (imm << 5) | dest);
+    }
+
+    fn mov_reg(&mut self, dest: u32, src: u32) {
+        self.code.push(0xaa0003e0 | (src << 16) | dest);
+    }
+
+    /// offset param counts in instructions
+    fn branch_zero(&mut self, reg: u32, offset: u32) {
+        self.code.push(0xb4000000 | (offset << 5) | reg);
+    }
+
     fn ret(&mut self) {
         self.code.push(0xd65f03c0);
     }
@@ -205,6 +218,7 @@ pub struct HookGenerator<'a> {
     instance_param_offset: Option<u32>,
     result_offset: Option<u32>,
     stack_offset: u32,
+    run_original_offset: u32,
     code: Code,
 }
 
@@ -222,7 +236,8 @@ impl<'a> HookGenerator<'a> {
             orig_param_offsets: Vec::new(),
             instance_param_offset: None,
             result_offset: None,
-            stack_offset: max_param_spill,
+            stack_offset: max_param_spill + 8,
+            run_original_offset: max_param_spill,
             code: Default::default(),
         };
 
@@ -252,6 +267,9 @@ impl<'a> HookGenerator<'a> {
                 hook_gen.code.store_base_offset(31, 31, offset + i * 8);
             }
         }
+
+        // run original by default
+        hook_gen.code.mov_imm(11, 1);
 
         hook_gen
     }
@@ -363,6 +381,9 @@ impl<'a> HookGenerator<'a> {
     }
 
     pub fn call_orig(&mut self) {
+        let branch_idx = self.code.code.len();
+        self.code.branch_zero(11, 0);
+
         if let Some(instance_offset) = self.instance_param_offset {
             self.code.load_base_offset(0, 31, instance_offset);
         }
@@ -374,6 +395,9 @@ impl<'a> HookGenerator<'a> {
             let offset = self.result_offset.unwrap();
             self.store_arg(ret_layout, offset);
         }
+
+        let branch_offset = (self.code.code.len() - branch_idx) as u32;
+        self.code.code[branch_idx] |= (branch_offset << 5);
     }
 
     fn inject_field(&mut self, field: &FieldInfo, arg: &Arg, byref: bool) {
@@ -426,6 +450,21 @@ impl<'a> HookGenerator<'a> {
         }
     }
 
+    fn inject_run_original(&mut self, arg: &Arg) {
+        let offset = self.instance_param_offset.unwrap();
+        match arg.storage {
+            ParameterStorage::GPReg(reg) => {
+                self.code
+                    .load_base_offset(reg, 31, self.run_original_offset);
+            }
+            ParameterStorage::Stack(to_offset) => {
+                self.code.load_base_offset(9, 31, offset);
+                self.code.store_base_offset(9, 31, to_offset);
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub(super) fn gen_call_hook(&mut self, method: CodegenMethod, injections: Vec<ParamInjection>) {
         for (injection, arg) in injections.iter().zip(method.layout.args.iter()) {
             match injection {
@@ -444,10 +483,18 @@ impl<'a> HookGenerator<'a> {
                     let offset = self.result_offset.unwrap();
                     self.load_arg(offset, arg, *byref);
                 }
+                ParamInjection::RunOriginal => {}
             }
         }
         self.code
             .call_addr(Some(method.method.methodPointer.unwrap() as usize));
+
+        if method.ret_layout.is_some() {
+            // Assume it's the boolean runOriginal
+            self.code.mov_reg(11, 0);
+        } else {
+            self.code.mov_imm(11, 1);
+        }
     }
 
     fn write_prologue_epilogue(&mut self) {

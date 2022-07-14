@@ -8,9 +8,9 @@ use crate::hook::codegen::HookGenerator;
 use crate::utils::{get_fields, get_ty_class};
 use anyhow::{bail, Result};
 use il2cpp_types::{
-    FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
-    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, Il2CppTypeEnum_IL2CPP_TYPE_VOID, MethodInfo,
-    METHOD_ATTRIBUTE_STATIC,
+    FieldInfo, Il2CppClass, Il2CppReflectionMethod, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_BOOLEAN,
+    Il2CppTypeEnum_IL2CPP_TYPE_CLASS, Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE,
+    Il2CppTypeEnum_IL2CPP_TYPE_VOID, MethodInfo, METHOD_ATTRIBUTE_STATIC,
 };
 use inline_hook::Hook;
 use std::ffi::CStr;
@@ -68,6 +68,7 @@ enum ParamInjection {
     LoadField(usize, bool),
     Result(bool),
     Instance,
+    RunOriginal,
 }
 
 unsafe fn get_injections(
@@ -124,11 +125,16 @@ unsafe fn get_injections(
             {
                 bail!("cannot inject __result for method with void return type")
             }
-            let byref = is_ref_of(original_method.return_type, param.ty);
+            let byref = is_ref_of(param.ty, original_method.return_type);
             if !byref && param.ty != original_method.return_type {
                 bail!("__result type mismatch");
             }
             injections.push(ParamInjection::Result(byref));
+        } else if param.name == "__runOriginal" {
+            if (*param.ty).type_() != Il2CppTypeEnum_IL2CPP_TYPE_BOOLEAN {
+                bail!("__runOriginal parameter must have type `bool`");
+            }
+            injections.push(ParamInjection::RunOriginal);
         } else {
             let mut found = false;
             for (i, original_param) in original_params.iter().enumerate() {

@@ -23,7 +23,6 @@ namespace MergeExample.Tests
 
         private static void Postfix(byte ___d, short ___c, int ___b, long ___a, ref Struct __instance)
         {
-            Plugin.Logger.Debug("in postfix");
             var s = new Struct
             {
                 a = ___a,
