@@ -242,7 +242,7 @@ fn copy_input(mod_config: &Mod, input_dir: String) -> Result<()> {
 pub fn build(regen_cpp: Option<String>, config: &mut Config) -> Result<()> {
     let manifest = Manifest::load()?;
     let mod_config = &manifest.plugin;
-    let app = config.get_app(&mod_config.id)?;
+    let app = config.get_app(&mod_config.app)?;
     let unity_install = config.get_unity_install(&app.unity_version)?;
 
     let unity_path = PathBuf::from(unity_install);

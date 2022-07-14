@@ -9,7 +9,7 @@ pub struct Manifest {
 
 impl Manifest {
     pub fn load() -> Result<Manifest> {
-        let str = fs::read_to_string("./QMerge.toml").context("failed to read plugin manifest")?;
+        let str = fs::read_to_string("./QMerge.toml").context("failed to read plugin manifest (`QMerge.toml`)")?;
         let manifest = toml::from_str(&str).context("failed to deserialize plugin manifest")?;
         Ok(manifest)
     }

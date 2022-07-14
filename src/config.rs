@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 use toml_edit::{Document, Item, Table};
@@ -11,10 +12,12 @@ where
 {
     loop {
         print!("{}: ", ask);
+        io::stdout().flush()?;
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)
             .context("unable to read user input")?;
+        input = input.trim().to_string();
         if verify(&input) {
             return Ok(input);
         }
@@ -35,7 +38,12 @@ fn verify_unity_install(path: &str) -> bool {
 
 fn verify_unity_ver(ver: &str) -> bool {
     // TODO: more unity versions
-    matches!(ver, "2019.4.28f1")
+    if !matches!(ver, "2019.4.28f1") {
+        println!("unity version does not exist.");
+        return false;
+    }
+
+    true
 }
 
 fn verify_ndk_install(path: &str) -> bool {
@@ -57,7 +65,7 @@ fn verify_adb_executable(path: &str) -> bool {
         return false;
     }
 
-    // TODO: Verity valid NDK installation
+    // TODO: Verify valid ADB executable
 
     true
 }
