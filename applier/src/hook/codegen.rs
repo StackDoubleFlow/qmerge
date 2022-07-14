@@ -451,11 +451,10 @@ impl<'a> HookGenerator<'a> {
     }
 
     fn inject_run_original(&mut self, arg: &Arg) {
-        let offset = self.instance_param_offset.unwrap();
+        let offset = self.run_original_offset;
         match arg.storage {
             ParameterStorage::GPReg(reg) => {
-                self.code
-                    .load_base_offset(reg, 31, self.run_original_offset);
+                self.code.load_base_offset(reg, 31, offset);
             }
             ParameterStorage::Stack(to_offset) => {
                 self.code.load_base_offset(9, 31, offset);
@@ -483,7 +482,9 @@ impl<'a> HookGenerator<'a> {
                     let offset = self.result_offset.unwrap();
                     self.load_arg(offset, arg, *byref);
                 }
-                ParamInjection::RunOriginal => {}
+                ParamInjection::RunOriginal => {
+                    self.inject_run_original(arg);
+                }
             }
         }
         self.code
