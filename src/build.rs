@@ -9,7 +9,9 @@ mod parser;
 mod runtime_metadata;
 mod type_sizes;
 
-use crate::config::{Mod, APPS, CONFIG};
+use crate::config::Config;
+use crate::manifest::{Manifest, Mod};
+use crate::utils::platform_executable;
 use anyhow::{bail, Context, Result};
 use clang::CompileCommand;
 use data::{get_str, offset_len, ModDataBuilder, RuntimeMetadata};
@@ -237,19 +239,13 @@ fn copy_input(mod_config: &Mod, input_dir: String) -> Result<()> {
     Ok(())
 }
 
-pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
-    let mod_config = Mod::read_config()?;
-    let app = APPS
-        .get(&mod_config.app)
-        .with_context(|| format!("Application '{}' not configured", mod_config.app))?;
-    let unity_install = CONFIG
-        .unity_installs
-        .get(&app.unity_version)
-        .with_context(|| format!("Unity version '{}' not configured", app.unity_version))?;
+pub fn build(regen_cpp: Option<String>, config: &mut Config) -> Result<()> {
+    let manifest = Manifest::load()?;
+    let mod_config = &manifest.plugin;
+    let app = config.get_app(&mod_config.id)?;
+    let unity_install = config.get_unity_install(&app.unity_version)?;
 
     let unity_path = PathBuf::from(unity_install);
-    let mono_path = unity_path.join("Editor/Data/MonoBleedingEdge/bin/mono");
-    let il2cpp_path = unity_path.join("Editor/Data/il2cpp/build/deploy/net471/il2cpp.exe");
 
     let transformed_path = Path::new("./build/sources/transformed");
     let out_path = Path::new("./build/bin/out");
@@ -264,13 +260,18 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
 
     let output_so_path = out_path.join(format!("{}.so", mod_config.id));
     let target = "aarch64-linux-android21";
-    let mut compile_command = CompileCommand::new(output_so_path, obj_path, target);
+    let ndk_path = config.get_ndk_path()?;
+    let mut compile_command = CompileCommand::new(&ndk_path, output_so_path, obj_path, target);
     compile_command.add_include_path(unity_path.join("Editor/Data/il2cpp/libil2cpp"));
     compile_command.add_include_path(include_path.into());
 
     let cpp_path = Path::new("./build/sources/cpp");
-    if regen_cpp {
-        copy_input(&mod_config, input_dir)?;
+    if let Some(input_dir) = regen_cpp {
+        let mut mono_path = unity_path.join("Editor/Data/MonoBleedingEdge/bin/mono");
+        platform_executable(&mut mono_path);
+        let il2cpp_path = unity_path.join("Editor/Data/il2cpp/build/deploy/net471/il2cpp.exe");
+
+        copy_input(mod_config, input_dir)?;
         if cpp_path.exists() {
             fs::remove_dir_all(&cpp_path)?;
         }
@@ -403,7 +404,8 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
                 } else if !fn_def.name.ends_with("_AdjustorThunk") {
                     lines.next().unwrap();
                     if fn_def.inline {
-                        metadata_usage_names.insert(fn_def.name.trim_end_matches("_inline").to_string() + src_name);
+                        metadata_usage_names
+                            .insert(fn_def.name.trim_end_matches("_inline").to_string() + src_name);
                     } else {
                         metadata_usage_names.insert(fn_def.name.to_string());
                     }
@@ -492,7 +494,7 @@ pub fn build(regen_cpp: bool, input_dir: String) -> Result<()> {
     };
 
     data_builder.process_generic_funcs(&mut function_usages);
-    let mod_data = data_builder.build(&mod_config, code_table_sizes)?;
+    let mod_data = data_builder.build(mod_config, code_table_sizes)?;
     // println!("{:#?}", &mod_data);
     function_usages.write_invokers(&mut compile_command, transformed_path, cpp_path)?;
     function_usages.write_generic_func_table(

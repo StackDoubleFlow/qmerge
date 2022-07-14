@@ -53,10 +53,7 @@ impl<'a> FnDecl<'a> {
         } else if let Some(line) = line.strip_prefix("IL2CPP_EXTERN_C inline  IL2CPP_METHOD_ATTR") {
             (line, true)
         } else {
-            (
-                line.strip_prefix("IL2CPP_EXTERN_C")?,
-                false,
-            )
+            (line.strip_prefix("IL2CPP_EXTERN_C")?, false)
         };
 
         let param_start = line.find('(')?;

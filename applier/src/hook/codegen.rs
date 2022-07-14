@@ -399,7 +399,8 @@ impl<'a> HookGenerator<'a> {
                 if arg.ptr {
                     self.code.add_imm(num, num, field_offset as u32)
                 } else {
-                    self.code.load_sized(num, num, field_offset as u32, arg.size);
+                    self.code
+                        .load_sized(num, num, field_offset as u32, arg.size);
                 }
             }
             _ => todo!(),
@@ -467,7 +468,11 @@ impl<'a> HookGenerator<'a> {
         let dest = HOOK_ALLOCATOR.lock().unwrap().alloc(self.code.size());
 
         let hook = Hook::new();
-        let orig_ptr = get_method_pointer(unsafe { &*self.original.method.klass }.image, self.original.method.token).unwrap();
+        let orig_ptr = get_method_pointer(
+            unsafe { &*self.original.method.klass }.image,
+            self.original.method.token,
+        )
+        .unwrap();
         unsafe {
             hook.install(orig_ptr as _, dest as _);
         }

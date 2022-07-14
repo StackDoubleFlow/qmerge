@@ -5,10 +5,10 @@ use crate::codegen_api::{
     _ZN6il2cpp2vm12ClassInlines19InitFromCodegenSlowEP11Il2CppClass,
     _ZN6il2cpp2vm13MetadataCache34GetTypeInfoFromTypeDefinitionIndexEi,
 };
-use anyhow::{Result, ensure, Context};
+use anyhow::{ensure, Context, Result};
 use il2cpp_types::{
-    FieldInfo, Il2CppClass, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
-    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, TypeDefinitionIndex, Il2CppImage,
+    FieldInfo, Il2CppClass, Il2CppImage, Il2CppType, Il2CppTypeEnum_IL2CPP_TYPE_CLASS,
+    Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE, TypeDefinitionIndex,
 };
 use std::{slice, str};
 

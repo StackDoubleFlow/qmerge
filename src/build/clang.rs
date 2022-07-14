@@ -1,4 +1,4 @@
-use crate::config::CONFIG;
+use crate::utils::platform_executable;
 use anyhow::{anyhow, Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,16 +16,23 @@ pub struct CompileCommand<'a> {
     source_files: Vec<PathBuf>,
     include_paths: Vec<PathBuf>,
     output_path: PathBuf,
+    ndk_path: &'a str,
     obj_path: &'a Path,
     target: &'a str,
 }
 
 impl<'a> CompileCommand<'a> {
-    pub fn new(output_path: PathBuf, obj_path: &'a Path, target: &'a str) -> Self {
+    pub fn new(
+        ndk_path: &'a str,
+        output_path: PathBuf,
+        obj_path: &'a Path,
+        target: &'a str,
+    ) -> Self {
         Self {
             source_files: Vec::new(),
             include_paths: Vec::new(),
             output_path,
+            ndk_path,
             obj_path,
             target,
         }
@@ -40,15 +47,14 @@ impl<'a> CompileCommand<'a> {
     }
 
     fn base_command(&self, cpp: bool) -> Command {
-        let mut clang_path = PathBuf::from(&CONFIG.ndk_path).join("toolchains/llvm/prebuilt");
+        let mut clang_path = PathBuf::from(self.ndk_path).join("toolchains/llvm/prebuilt");
         clang_path.push(NDK_HOST_TAG);
         if cpp {
             clang_path.push("bin/clang++");
         } else {
             clang_path.push("bin/clang");
         }
-        #[cfg(target_os = "windows")]
-        clang_path.set_extension(".exe");
+        platform_executable(&mut clang_path);
 
         let mut command = Command::new(clang_path);
         command.args(&["-target", self.target]);
@@ -95,7 +101,8 @@ impl<'a> CompileCommand<'a> {
             object_files.push(self.compile_source(source_file)?);
         }
 
-        let applier_path = PathBuf::from("../target/aarch64-linux-android/release/libmerge_applier.so");
+        let applier_path =
+            PathBuf::from("../target/aarch64-linux-android/release/libmerge_applier.so");
         let applier_path = if applier_path.exists() {
             applier_path
         } else {

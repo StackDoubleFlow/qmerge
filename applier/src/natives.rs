@@ -3,7 +3,7 @@ use std::ffi::CString;
 use crate::hook;
 use il2cpp_types::{Il2CppReflectionMethod, Il2CppString, MethodInfo};
 use ndk_sys::{__android_log_buf_write, log_id_LOG_ID_MAIN};
-use tracing::{error, debug};
+use tracing::{debug, error};
 
 pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[
     (
@@ -14,10 +14,7 @@ pub const NATIVE_MAP: &[((&str, &str, &str), *const ())] = &[
         ("QMerge.Logging", "Logger", "LogMessageNative"),
         log_message as _,
     ),
-    (
-        ("QMerge", "Diagnostics", "Crash"),
-        crash as _,
-    ),
+    (("QMerge", "Diagnostics", "Crash"), crash as _),
 ];
 
 unsafe extern "C" fn create_hook(

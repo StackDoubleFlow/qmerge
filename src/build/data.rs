@@ -3,7 +3,7 @@ use super::runtime_metadata::{
     GenericClass, GenericMethodSpec, Il2CppType, Il2CppTypeData, Il2CppTypeEnum, SourceGenericInst,
     SrcGenericMethodFuncs,
 };
-use crate::config::Mod;
+use crate::manifest::Mod;
 use anyhow::{bail, Context, Result};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
@@ -343,13 +343,11 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             _ => Some({
                 let ty = &self.runtime_metadata.types[idx as usize];
                 match ty.data {
-                    Il2CppTypeData::TypeDefIdx(idx) => {
-                        self.add_type_def(idx as u32)?
-                    }
+                    Il2CppTypeData::TypeDefIdx(idx) => self.add_type_def(idx as u32)?,
                     // TODO: Is this possible?
-                    _ => todo!("declaing type {:?}", ty.data)
+                    _ => todo!("declaing type {:?}", ty.data),
                 }
-            })
+            }),
         })
     }
 

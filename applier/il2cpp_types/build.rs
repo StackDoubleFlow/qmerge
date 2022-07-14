@@ -49,12 +49,7 @@ fn main() {
                 .to_str()
                 .unwrap(),
         )
-        .header(
-            libil2cpp_path
-                .join("il2cpp-tabledefs.h")
-                .to_str()
-                .unwrap(),
-        )
+        .header(libil2cpp_path.join("il2cpp-tabledefs.h").to_str().unwrap())
         // TODO: Can I derive these for specific types only?
         .derive_eq(true)
         .derive_hash(true)
