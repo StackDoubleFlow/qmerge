@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use crate::config::Config;
-use crate::{build, upload};
+use crate::{build, package, upload};
 
 #[derive(Parser)]
 #[clap(version)]
@@ -20,6 +20,8 @@ enum Commands {
     },
     /// Upload the generated mod files
     Upload,
+    /// Package the plugin into a qmod file
+    Package,
 }
 
 pub fn run() -> Result<()> {
@@ -30,6 +32,7 @@ pub fn run() -> Result<()> {
     match cli.command {
         Commands::Build { regen_cpp } => build::build(regen_cpp, &mut config)?,
         Commands::Upload => upload::upload(&mut config)?,
+        Commands::Package => package::build_package(&mut config)?,
     }
 
     Ok(())

@@ -1,6 +1,11 @@
 [plugin]
 app = "com.beatgames.beatsaber"
-name = "Merge Example Mod"
-version = "0.1.0"
+app_version = "1.23.0"
 id = "MergeExample"
-dependencies = ["QMergeCore"]
+name = "Merge Example Mod"
+author = "StackDoubleFlow"
+version = "0.1.0"
+description = "An example mod for the QMerge modding framework"
+
+[dependencies]
+QMergeCore = "^0.0.0"

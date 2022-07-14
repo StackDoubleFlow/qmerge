@@ -1,6 +1,12 @@
 [plugin]
 app = "com.beatgames.beatsaber"
-name = "QMerge Core Library"
-version = "0.1.0"
+app_version = "1.23.0"
 id = "QMergeCore"
-dependencies = []
+name = "QMerge Core Library"
+author = "StackDoubleFlow"
+version = "0.1.0"
+description = "QMerge modding framework core loader and library"
+core_files = ["../test_analysis/xref_gen.json"]
+native_mods = ["../target/aarch64-linux-android/release/libmerge_applier.so"]
+
+[dependencies]

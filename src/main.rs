@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod error;
 mod manifest;
+mod package;
 mod upload;
 mod utils;
 
