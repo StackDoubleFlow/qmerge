@@ -45,9 +45,7 @@ impl Code {
 
     /// ldr x<dest>, [x<base>/sp, #<offset>]
     fn load_base_offset(&mut self, dest: u32, base: u32, offset: u32) {
-        let offset = offset / 8;
-        let ins = 0xf9400000 | (offset << 10) | (base << 5) | dest;
-        self.code.push(ins);
+        self.load_sized(dest, base, offset, 8);
     }
 
     /// ldr x<dest>, [x<base>/sp, #<offset>]
@@ -244,8 +242,15 @@ impl<'a> HookGenerator<'a> {
         }
 
         if let Some(ret_layout) = &original.ret_layout {
+            let old_stack_size = hook_gen.stack_offset;
             let offset = hook_gen.alloc_arg_on_stack(ret_layout);
             hook_gen.result_offset = Some(offset);
+
+            // TODO: if size is not a multiple of 8 this won't work properly
+            let size = hook_gen.stack_offset - old_stack_size;
+            for i in 0..size / 8 {
+                hook_gen.code.store_base_offset(31, 31, offset + i * 8);
+            }
         }
 
         hook_gen
