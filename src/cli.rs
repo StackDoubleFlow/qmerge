@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use crate::config::Config;
-use crate::{build, package, upload};
+use crate::{adb, build, package};
 
 #[derive(Parser)]
 #[clap(version)]
@@ -22,6 +22,8 @@ enum Commands {
     Upload,
     /// Package the plugin into a qmod file
     Package,
+    /// Upload your mod and start the game, and begin logging to `test.log`
+    Run,
 }
 
 pub fn run() -> Result<()> {
@@ -31,8 +33,12 @@ pub fn run() -> Result<()> {
 
     match cli.command {
         Commands::Build { regen_cpp } => build::build(regen_cpp, &mut config)?,
-        Commands::Upload => upload::upload(&mut config)?,
+        Commands::Upload => adb::upload(&mut config)?,
         Commands::Package => package::build_package(&mut config)?,
+        Commands::Run => {
+            adb::upload(&mut config)?;
+            adb::start_and_log(&mut config)?;
+        }
     }
 
     Ok(())

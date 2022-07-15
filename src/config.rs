@@ -183,6 +183,7 @@ impl Config {
                     "Please enter your NDK installation directory",
                     verify_ndk_install,
                 )?;
+                self.doc["ndk_path"] = toml_edit::value(path.clone());
                 self.save()?;
                 path
             }
@@ -208,7 +209,9 @@ impl Config {
                     "Please enter your ADB executable path",
                     verify_adb_executable,
                 )?;
+                self.doc["adb_path"] = toml_edit::value(path.clone());
                 self.save()?;
+                self.toml.adb_path = Some(path.clone());
                 path
             }
         };
