@@ -1,0 +1,73 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - x86_64-pc-windows-msvc
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: .exe
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        target: ${{ matrix.target }}
+        profile: minimal
+        override: true
+    - uses: Swatinem/rust-cache@v1
+      with:
+        key: ${{ matrix.target }}
+
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target ${{ matrix.target }}
+
+    - name: Upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: qmerge-${{ matrix.target }}
+        path: target/${{ matrix.target }}/release/qmerge${{ matrix.ext }}
+
+  build-macos-universal:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: qmerge-x86_64-apple-darwin
+          path: x86_64
+      - uses: actions/download-artifact@v3
+        with:
+          name: qmerge-aarch64-apple-darwin
+          path: aarch64
+
+      - name: Build
+        run: lipo -create -output qmerge x86_64/qmerge aarch64/qmerge
+
+      - name: Upload
+        uses: actions/upload-artifact@v2
+        with:
+          name: qmerge-universal-apple-darwin
+          path: qmerge
