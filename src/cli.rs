@@ -24,6 +24,10 @@ enum Commands {
     Package,
     /// Upload your mod and start the game, and begin logging to `test.log`
     Run,
+    /// Setup an application with the given id
+    Setup {
+        id: String,
+    }
 }
 
 pub fn run() -> Result<()> {
@@ -39,6 +43,7 @@ pub fn run() -> Result<()> {
             adb::upload(&mut config)?;
             adb::start_and_log(&mut config)?;
         }
+        Commands::Setup { id } => config.setup_app(&id)?,
     }
 
     Ok(())

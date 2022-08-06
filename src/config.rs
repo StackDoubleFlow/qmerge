@@ -112,6 +112,17 @@ impl Config {
         Ok(())
     }
 
+    pub fn setup_app(&mut self, id: &str) -> Result<()> {
+        self.get_ndk_path()?;
+        self.get_adb_path()?;
+
+        let app = self.get_app(id)?;
+        self.get_unity_install(&app.unity_version)?;
+
+        println!("Setup complete.");
+        Ok(())
+    }
+
     pub fn get_unity_install(&mut self, version: &str) -> Result<String> {
         let mut path = None;
         if let Some(installs) = &self.toml.unity_installs {
