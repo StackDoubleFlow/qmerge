@@ -1,21 +1,22 @@
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.DotNet.Signatures.Types;
-using AsmResolver.PE.DotNet.Metadata.Tables.Rows;
 
 namespace DllsGen;
 
 /// <summary>
-/// Convert references from reference assemblies to references from shim assemblies.
+/// Convert references from one set of assemblies to references from another set of assembles.
 /// </summary>
 public class ReferenceConverter
 {
-    private readonly Dictionary<string, AssemblyDefinition> _refToShimAssembly;
+    private readonly Dictionary<string, AssemblyDefinition> _assemblyNameMap;
     private readonly ModuleDefinition _module;
 
-    public ReferenceConverter(Dictionary<string, AssemblyDefinition> refToShimAssembly, ModuleDefinition module)
+    /// <param name="assemblyNameMap">a map from the name of the assemblies we're converting from to the target assemblies.</param>
+    /// <param name="module">the module which the new references will belong to.</param>
+    public ReferenceConverter(Dictionary<string, AssemblyDefinition> assemblyNameMap, ModuleDefinition module)
     {
-        _refToShimAssembly = refToShimAssembly;
+        _assemblyNameMap = assemblyNameMap;
         _module = module;
     }
 
@@ -23,7 +24,7 @@ public class ReferenceConverter
 
     public AssemblyReference MakeAssemblyReference(string name)
     {
-        return (AssemblyReference) _module.DefaultImporter.ImportScope(new AssemblyReference(_refToShimAssembly[name]));
+        return (AssemblyReference) _module.DefaultImporter.ImportScope(new AssemblyReference(_assemblyNameMap[name]));
     }
 
     public IResolutionScope Convert(IResolutionScope scope) => scope switch
@@ -37,11 +38,14 @@ public class ReferenceConverter
     public TypeReference Convert(TypeReference reference)
     {
         var def = reference.Resolve();
-        var scope = def?.DeclaringType == null && def.Module.Name != _module.Name ? MakeAssemblyReference(def.Module.Assembly.Name) : Convert(reference.Scope);
+        var scope = def?.DeclaringType == null && def.Module.Name != _module.Name
+            ? MakeAssemblyReference(def.Module.Assembly.Name)
+            : Convert(reference.Scope);
         return new TypeReference(_module, scope, reference.Namespace, reference.Name);
     }
 
-    public ITypeDefOrRef? Convert(ITypeDefOrRef typeDefOrRef) => typeDefOrRef switch {
+    public ITypeDefOrRef? Convert(ITypeDefOrRef typeDefOrRef) => typeDefOrRef switch
+    {
         TypeDefinition typeDef => _module.MetadataResolver.ResolveType(Convert(typeDef.ToTypeReference())),
         TypeReference typeRef => Convert(typeRef),
         TypeSpecification typeSpec => new TypeSpecification(Convert(typeSpec.Signature)),
@@ -54,7 +58,8 @@ public class ReferenceConverter
         PointerTypeSignature sig => new PointerTypeSignature(Convert(sig.BaseType)),
         ByReferenceTypeSignature sig => new ByReferenceTypeSignature(Convert(sig.BaseType)),
         TypeDefOrRefSignature sig => new TypeDefOrRefSignature(Convert(sig.Type)),
-        GenericParameterSignature sig => new GenericParameterSignature((ModuleDefinition) Convert(sig.Scope), sig.ParameterType, sig.Index),
+        GenericParameterSignature sig => new GenericParameterSignature((ModuleDefinition) Convert(sig.Scope),
+            sig.ParameterType, sig.Index),
         ArrayTypeSignature sig => new ArrayTypeSignature(Convert(sig.BaseType), sig.Dimensions.ToArray()),
         GenericInstanceTypeSignature sig => new GenericInstanceTypeSignature(Convert(sig.GenericType), sig.IsValueType,
             sig.TypeArguments.Select(Convert).ToArray()),
@@ -95,16 +100,17 @@ public class ReferenceConverter
         return new MemberReference(parent, reference.Name, sig);
     }
 
-    public MethodSignature Convert(MethodSignature sig)=> new(sig.Attributes, Convert(sig.ReturnType), sig.ParameterTypes.Select(Convert))
-    {
-        GenericParameterCount = sig.GenericParameterCount
-    };
+    public MethodSignature Convert(MethodSignature sig) =>
+        new(sig.Attributes, Convert(sig.ReturnType), sig.ParameterTypes.Select(Convert))
+        {
+            GenericParameterCount = sig.GenericParameterCount
+        };
 
     public GenericInstanceMethodSignature Convert(GenericInstanceMethodSignature sig)
     {
         return new GenericInstanceMethodSignature(sig.Attributes, sig.TypeArguments.Select(Convert).ToArray());
     }
-    
+
     public IMethodDescriptor? Convert(IMethodDescriptor descriptor) => descriptor switch
     {
         MethodDefinition def => (MethodDefinition) Convert(def.DeclaringType)
