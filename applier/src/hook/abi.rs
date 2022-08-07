@@ -97,8 +97,8 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<(u32, Il2CppTypeEn
     let mut base_ty = None;
     let mut num = 0;
     for field in fields {
-        if field.offset == -1 {
-            // It's static
+        let attrs = unsafe { (*field.type_).attrs() };
+        if attrs & FIELD_ATTRIBUTE_STATIC != 0 {
             continue;
         }
         let field_ty = unsafe { (*field.type_).type_() };
@@ -106,6 +106,8 @@ fn is_hfa(ty: &Il2CppType, ty_enum: Il2CppTypeEnum) -> Option<(u32, Il2CppTypeEn
             None => {
                 if is_fp_ty(field_ty) {
                     base_ty = Some(field_ty);
+                } else {
+                    return None;
                 }
             }
             Some(base_ty) => {
@@ -140,6 +142,7 @@ pub enum ParameterStorage {
 
 pub struct Arg {
     pub ty: &'static Il2CppType,
+    pub ty_size: usize,
     // if the parameter was copied to memory and converted to a pointer
     pub ptr: bool,
     pub storage: ParameterStorage,
@@ -165,11 +168,15 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
 
     let mut args: Vec<_> = types
         .iter()
-        .map(|&ty| Arg {
-            storage: ParameterStorage::Unallocated,
-            ty,
-            ptr: false,
-            size: get_ty_size(ty),
+        .map(|&ty| {
+            let ty_size = get_ty_size(ty);
+            Arg {
+                storage: ParameterStorage::Unallocated,
+                ty,
+                ty_size,
+                ptr: false,
+                size: ty_size,
+            }
         })
         .collect();
 
@@ -185,7 +192,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
             continue;
         }
         // B.4
-        if is_composite_ty(arg.ty.type_()) && get_ty_class(arg.ty).actualSize > 16 {
+        if is_composite_ty(arg.ty.type_()) && get_ty_size(arg.ty)> 16 {
             arg.ptr = true;
             arg.size = 8;
         }
