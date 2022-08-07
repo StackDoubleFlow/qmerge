@@ -18,6 +18,9 @@
         <Reference Include="Main">
             <HintPath>build/Managed/Main.dll</HintPath>
         </Reference>
+        <Reference Include="BeatmapCore">
+            <HintPath>build/Managed/BeatmapCore.dll</HintPath>
+        </Reference>
         <Reference Include="Unity.TextMeshPro">
             <HintPath>build/Managed/Unity.TextMeshPro.dll</HintPath>
         </Reference>
