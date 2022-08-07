@@ -25,9 +25,7 @@ enum Commands {
     /// Upload your mod and start the game, and begin logging to `test.log`
     Run,
     /// Setup an application with the given id
-    Setup {
-        id: String,
-    }
+    Setup { id: String },
 }
 
 pub fn run() -> Result<()> {

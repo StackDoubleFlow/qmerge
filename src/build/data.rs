@@ -13,9 +13,9 @@ use merge_data::{
     AddedAssembly, AddedEvent, AddedField, AddedGenericContainer, AddedGenericParameter,
     AddedImage, AddedMetadataUsagePair, AddedMethod, AddedParameter, AddedProperty,
     AddedTypeDefinition, CodeTableSizes, CustomAttributeTypeRange, EncodedMethodIndex,
-    GenericClassInst, GenericContainerOwner, GenericContext, GenericInst, GenericMethodFunctions,
-    GenericMethodInst, ImageDescription, MergeModData, MethodDescription, TypeDefDescription,
-    TypeDescription, TypeDescriptionData,
+    FieldDescription, GenericClassInst, GenericContainerOwner, GenericContext, GenericInst,
+    GenericMethodFunctions, GenericMethodInst, ImageDescription, MergeModData, MethodDescription,
+    TypeDefDescription, TypeDescription, TypeDescriptionData,
 };
 use std::collections::{HashMap, HashSet};
 use std::str;
@@ -99,6 +99,10 @@ pub struct ModDataBuilder<'md, 'ty> {
     methods: Vec<MethodDescription>,
     method_def_map: HashMap<u32, usize>,
 
+    field_refs: Vec<FieldDescription>,
+    field_ref_map: HashMap<u32, usize>,
+    field_start_lookup: Vec<u32>,
+
     generic_methods: Vec<GenericMethodInst>,
     generic_method_map: HashMap<u32, usize>,
     generic_funcs: Option<Vec<GenericMethodFunctions>>,
@@ -116,6 +120,15 @@ pub struct ModDataBuilder<'md, 'ty> {
 
 impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
     pub fn new(metadata: &'md Metadata, runtime_metadata: RuntimeMetadata<'ty>) -> Self {
+        let mut field_start_lookup = Vec::new();
+        for (idx, ty_def) in metadata.type_definitions.iter().enumerate() {
+            if ty_def.field_start == u32::MAX {
+                continue;
+            }
+
+            field_start_lookup.push(idx as u32);
+        }
+        field_start_lookup.sort_by_key(|&idx| metadata.type_definitions[idx as usize].field_start);
         ModDataBuilder {
             metadata,
             runtime_metadata,
@@ -127,6 +140,9 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             type_map: HashMap::new(),
             methods: Vec::new(),
             method_def_map: HashMap::new(),
+            field_refs: Vec::new(),
+            field_ref_map: HashMap::new(),
+            field_start_lookup,
             generic_methods: Vec::new(),
             generic_method_map: HashMap::new(),
             generic_funcs: None,
@@ -571,6 +587,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             type_def_descriptions: self.type_definitions,
             type_descriptions: self.added_types,
             method_descriptions: self.methods,
+            field_descriptions: self.field_refs,
 
             dependencies: manifest.dependencies.keys().cloned().collect(),
             load_before: config.load_before.clone(),
@@ -710,6 +727,23 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         Ok(desc_idx)
     }
 
+    fn add_field_ref(&mut self, idx: u32) -> Result<usize> {
+        if self.field_ref_map.contains_key(&idx) {
+            return Ok(self.field_ref_map[&idx]);
+        }
+
+        let field = &self.metadata.field_refs[idx as usize];
+
+        let desc_idx = self.field_refs.len();
+        let desc = FieldDescription {
+            defining_type: self.add_type(field.type_index)?,
+            idx: field.field_index,
+        };
+        self.field_refs.push(desc);
+        self.field_ref_map.insert(idx, desc_idx);
+        Ok(desc_idx)
+    }
+
     fn add_encoded(&mut self, encoded_idx: u32) -> Result<EncodedMethodIndex> {
         let ty = (encoded_idx & 0xE0000000) >> 29;
         let idx = encoded_idx & 0x1FFFFFFF;
@@ -717,6 +751,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             1 => EncodedMethodIndex::Il2CppClass(self.add_type(idx)?),
             2 => EncodedMethodIndex::Il2CppType(self.add_type(idx)?),
             3 => EncodedMethodIndex::MethodInfo(self.add_method(idx)?),
+            4 => EncodedMethodIndex::FieldInfo(self.add_field_ref(idx)?),
             5 => EncodedMethodIndex::StringLiteral(self.add_string_literal(idx)?),
             6 => EncodedMethodIndex::MethodRef(self.add_generic_method(idx)?),
             _ => bail!("Unsupported encoded method index with type {}", ty),

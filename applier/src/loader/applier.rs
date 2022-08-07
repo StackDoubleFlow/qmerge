@@ -401,6 +401,7 @@ impl<'md> ModLoader<'md> {
         ty_resolver: &mut TypeResolver,
         ctx: &TypeResolveContext,
         method_refs: &[usize],
+        field_ref_offset: usize,
         gen_methods: &[usize],
     ) -> Result<u32> {
         Ok(match eidx {
@@ -411,6 +412,7 @@ impl<'md> ModLoader<'md> {
                 ty_resolver.resolve(idx, self, ctx)? as u32 | 0x40000000
             }
             EncodedMethodIndex::MethodInfo(idx) => method_refs[idx] as u32 | 0x60000000,
+            EncodedMethodIndex::FieldInfo(idx) => (idx + field_ref_offset) as u32 | 0x80000000,
             EncodedMethodIndex::StringLiteral(idx) => {
                 let literal_idx = self.metadata.string_literal.len();
                 let literal_data_idx = self.metadata.string_literal_data.len();
@@ -845,6 +847,17 @@ impl<'md> ModLoader<'md> {
             );
         }
 
+        debug!("Resolving field refs");
+        let field_ref_offset = self.metadata.field_refs.len();
+        for desc in &mod_data.field_descriptions {
+            // TODO: default context?
+            let decl_ty = ty_resolver.resolve(desc.defining_type, self, &Default::default())?;
+            self.metadata.field_refs.push(Il2CppFieldRef {
+                typeIndex: decl_ty,
+                fieldIndex: desc.idx as i32,
+            });
+        }
+
         debug!("Resolving generic methods");
         let gen_method_offset = self.metadata_registration.method_specs.len();
         let mut gen_methods = Vec::with_capacity(mod_data.generic_method_insts.len());
@@ -976,6 +989,7 @@ impl<'md> ModLoader<'md> {
                     &mut ty_resolver,
                     &ctx,
                     &method_refs,
+                    field_ref_offset,
                     &gen_methods,
                 )?;
                 self.metadata.vtable_methods.push(new_eidx);
@@ -1069,6 +1083,7 @@ impl<'md> ModLoader<'md> {
                     &mut ty_resolver,
                     &Default::default(),
                     &method_refs,
+                    field_ref_offset,
                     &gen_methods,
                 )?;
                 self.metadata

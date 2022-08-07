@@ -16,6 +16,7 @@ pub fn transform(
 ) -> Result<(Vec<String>, usize)> {
     let src = fs::read_to_string(cpp_path.join("Il2CppMetadataUsage.c"))?;
 
+    // The names and indices of the metadata usage ranges
     let mut required_usage_ids = Vec::new();
     for line in src.lines() {
         if line.starts_with("const uint32_t") {

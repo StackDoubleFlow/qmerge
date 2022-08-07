@@ -5,6 +5,7 @@ type ImageDescriptionIdx = usize;
 type TypeDescriptionIdx = usize;
 type TypeDefDescriptionIdx = usize;
 type MethodDescriptionIdx = usize;
+type FieldDescriptionIdx = usize;
 type StringLiteralIdx = usize;
 
 type GenericInstIdx = usize;
@@ -59,6 +60,12 @@ pub struct MethodDescription {
     pub params: Vec<TypeDescriptionIdx>,
     pub return_ty: TypeDescriptionIdx,
     pub num_gen_params: u32,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct FieldDescription {
+    pub defining_type: TypeDescriptionIdx,
+    pub idx: u32,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -136,10 +143,9 @@ pub enum EncodedMethodIndex {
     Il2CppClass(TypeDescriptionIdx),
     Il2CppType(TypeDescriptionIdx),
     MethodInfo(MethodDescriptionIdx),
+    FieldInfo(FieldDescriptionIdx),
     StringLiteral(StringLiteralIdx),
     MethodRef(GenericMethodInstIdx),
-    // TODO:
-    // FieldInfo
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -253,6 +259,7 @@ pub struct MergeModData {
     pub type_def_descriptions: Vec<TypeDefDescription>,
     pub type_descriptions: Vec<TypeDescription>,
     pub method_descriptions: Vec<MethodDescription>,
+    pub field_descriptions: Vec<FieldDescription>,
 
     // Load ordering
     pub dependencies: Vec<String>,
