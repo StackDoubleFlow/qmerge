@@ -7,11 +7,13 @@ namespace QMerge.Hooking
     {
         public Type type;
         public string methodName;
+        public Type[]? parameterTypes;
 
-        public Hook(Type type, string methodName)
+        public Hook(Type type, string methodName, Type[]? parameterTypes = null)
         {
             this.type = type;
             this.methodName = methodName;
+            this.parameterTypes = parameterTypes;
         }
     }
 }

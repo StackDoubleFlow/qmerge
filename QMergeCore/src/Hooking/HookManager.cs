@@ -15,7 +15,7 @@ namespace QMerge.Hooking
                                                     | BindingFlags.SetField
                                                     | BindingFlags.GetProperty
                                                     | BindingFlags.SetProperty;
-        
+
         public void HookAll(Assembly assembly)
         {
             var types = assembly.GetTypes();
@@ -38,7 +38,11 @@ namespace QMerge.Hooking
 
         private void CreateHook(Hook hook, Type type)
         {
-            var original = hook.type.GetMethod(hook.methodName, AllLookupFlags);
+            var original = hook.parameterTypes switch
+            {
+                null => hook.type.GetMethod(hook.methodName, AllLookupFlags),
+                _ => hook.type.GetMethod(hook.methodName, AllLookupFlags, null, hook.parameterTypes, null)
+            };
             if (original == null)
                 throw new Exception("could not find method to hook");
 
@@ -71,6 +75,7 @@ namespace QMerge.Hooking
                 Debug.Log("Could not find prefix or postfix in hook {type}");
                 return;
             }
+
             CreateHookNative(original, prefix, postfix);
         }
 

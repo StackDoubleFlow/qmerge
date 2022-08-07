@@ -36,7 +36,7 @@ namespace QMerge.Logging
         public void Error(string message) => Log(LogPriority.Error, message);
         public void Fatal(string message) => Log(LogPriority.Fatal, message);
         public void Silent(string message) => Log(LogPriority.Silent, message);
-        
+
         private static void LogMessageNative(int priority, string tag, string message)
         {
             NativeHelper.NativeStub(priority, tag, message);
