@@ -281,9 +281,13 @@ impl<'a> HookGenerator<'a> {
         match arg.storage {
             ParameterStorage::GPReg(_) => {
                 if arg.ptr {
-                    todo!("get struct size");
+                    self.stack_offset += arg.ty_size as u32;
+                } else {
+                    self.stack_offset += 8;
                 }
-                self.stack_offset += 8;
+            }
+            ParameterStorage::GPRRange(_, count) => {
+                self.stack_offset += 8 * count;
             }
             ParameterStorage::VectorReg(_) => {
                 self.stack_offset += 8;
@@ -308,6 +312,12 @@ impl<'a> HookGenerator<'a> {
                     todo!("copy structure to stack")
                 }
                 self.code.store_base_offset(reg, 31, stack_offset);
+            }
+            ParameterStorage::GPRRange(start, count) => {
+                for i in 0..count {
+                    let offset = stack_offset + i * 8;
+                    self.code.store_base_offset(start + i, 31, offset);
+                }
             }
             ParameterStorage::VectorReg(reg) => {
                 self.code.store_base_offset_fp(reg, 31, stack_offset, 8);
@@ -350,8 +360,15 @@ impl<'a> HookGenerator<'a> {
             ParameterStorage::GPReg(reg) => {
                 if to.ptr {
                     todo!("load ptr");
+                } else {
+                    self.code.load_base_offset(reg, 31, stack_offset);
                 }
-                self.code.load_base_offset(reg, 31, stack_offset);
+            }
+            ParameterStorage::GPRRange(start, count) => {
+                for i in 0..count {
+                    let offset = stack_offset + i * 8;
+                    self.code.load_base_offset(start + i, 31, offset);
+                }
             }
             ParameterStorage::VectorReg(reg) => {
                 self.code.load_base_offset_fp(reg, 31, stack_offset, 8);
