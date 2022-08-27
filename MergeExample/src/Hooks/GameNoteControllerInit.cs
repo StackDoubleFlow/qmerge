@@ -7,9 +7,8 @@ namespace InvertedArrows.Hooks
     [Hook(typeof(GameNoteController), "Init",
         new[]
         {
-            typeof(NoteData), typeof(float), typeof(Vector3), typeof(Vector3), typeof(Vector3), typeof(float), typeof
-                (float),
-            typeof(float), typeof(NoteVisualModifierType), typeof(float), typeof(float)
+            typeof(NoteData), typeof(float), typeof(Vector3), typeof(Vector3), typeof(Vector3), typeof(float),
+            typeof(float), typeof(float), typeof(NoteVisualModifierType), typeof(float), typeof(float)
         })]
     class GameNoteControllerInit
     {
@@ -17,7 +16,7 @@ namespace InvertedArrows.Hooks
 
         public static void Prefix(NoteData noteData)
         {
-            if ((int) noteData.cutDirection > 7)
+            if ((int) noteData.cutDirection <= 7)
             {
                 Plugin.Logger.Info("Changing cut direction to " + directionLookup[(int) noteData.cutDirection]);
                 PropertyInfo? prop =
