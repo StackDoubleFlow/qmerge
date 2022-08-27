@@ -11,6 +11,7 @@ pub unsafe extern "C" fn merge_prestub() -> ! {
       "stp x4, x5, [sp, #(16*2)]",
       "stp x6, x7, [sp, #(16*3)]",
       "stp fp, lr, [sp, #(16*4)]",
+      "add fp, sp, #(16*4)",
       "mov x0, lr",
       "bl {}",
       "mov x10, x0",
