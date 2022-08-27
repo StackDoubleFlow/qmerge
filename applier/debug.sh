@@ -1,23 +1,23 @@
 #!/bin/bash
 # set -x
 
-# cargo ndk -t arm64-v8a build --release
+cargo ndk -t arm64-v8a build --release
 
-# adb push ../target/aarch64-linux-android/release/libmerge_applier.so /sdcard/Android/data/com.beatgames.beatsaber/files/mods/libmerge_applier.so
-# adb shell am force-stop com.beatgames.beatsaber
+adb push ../target/aarch64-linux-android/release/libmerge_applier.so /sdcard/Android/data/com.beatgames.beatsaber/files/mods/libmerge_applier.so
 
 # Run lldb-server in the background
 # adb shell "cat /data/local/tmp/lldb-server | run-as com.beatgames.beatsaber sh -c 'cat > /data/data/com.beatgames.beatsaber/lldb/bin/lldb-server && chmod 700 /data/data/com.beatgames.beatsaber/lldb/bin/lldb-server'"
-# adb shell run-as com.beatgames.beatsaber ./lldb/bin/lldb-server  platform --listen "*:42069" --server &
+# adb shell run-as com.beatgames.beatsaber ./lldb/bin/lldb-server platform --listen "*:42069" --server &
 
 # Forward port to connect to lldb-server
 adb forward tcp:42069 tcp:42069
 
 # Start game
-# adb shell am start com.beatgames.beatsaber/com.unity3d.player.UnityPlayerActivity
+# adb shell am set-debug-app -w com.beatgames.beatsaber
+adb shell am start -S -W com.beatgames.beatsaber/com.unity3d.player.UnityPlayerActivity
 
 # Wait for game process to start and mods to load
-# sleep 7
+# sleep 8
 
 # Get pid of game process and format it into the debugger url
 debugPid=$(adb shell pidof com.beatgames.beatsaber)
@@ -34,11 +34,9 @@ debugUrl="vscode://vadimcn.vscode-lldb/launch/config?{
     postRunCommands: [
         'pro hand -p true -s false SIGPWR',
         'pro hand -p true -s false SIGXCPU',
-        'pro hand -p true -s false SIG33'
+        'pro hand -p true -s false SIG33',
     ]
 }"
 
 # Run CodeLLDB extension debugger
 code --open-url "$debugUrl"
-
-adb logcat -c && adb logcat > test.log
