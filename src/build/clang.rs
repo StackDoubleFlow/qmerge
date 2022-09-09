@@ -62,7 +62,7 @@ impl<'a> CompileCommand<'a> {
     }
 
     fn compile_source(&self, path: &Path) -> Result<PathBuf> {
-        let cpp = path.extension().unwrap() == ".cpp";
+        let cpp = path.extension().unwrap() == "cpp";
         let mut command = self.base_command(cpp);
         command
             .args(&[
@@ -83,7 +83,6 @@ impl<'a> CompileCommand<'a> {
         let output_path = self.obj_path.join(name).with_extension("o");
         command.arg("-o");
         command.arg(&output_path);
-        // dbg!(&command);
 
         let status = command
             .status()
@@ -117,7 +116,7 @@ impl<'a> CompileCommand<'a> {
             // TODO: Get path to applier binary
             .arg(applier_path)
             .args(&object_files);
-        // dbg!(&command);
+        dbg!(&command);
         let status = command.status().context("failed to execute link command")?;
         if status.success() {
             Ok(())
