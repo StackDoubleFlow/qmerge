@@ -116,7 +116,7 @@ impl<'a> CompileCommand<'a> {
             // TODO: Get path to applier binary
             .arg(applier_path)
             .args(&object_files);
-        dbg!(&command);
+        // dbg!(&command);
         let status = command.status().context("failed to execute link command")?;
         if status.success() {
             Ok(())

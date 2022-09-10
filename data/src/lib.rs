@@ -97,6 +97,7 @@ pub struct AddedField {
     pub name: String,
     pub ty: TypeDescriptionIdx,
     pub token: u32,
+    pub default_val: Option<Vec<u8>>,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -104,6 +105,7 @@ pub struct AddedParameter {
     pub name: String,
     pub token: u32,
     pub ty: TypeDescriptionIdx,
+    pub default_val: Option<Vec<u8>>,
 }
 
 #[derive(Encode, Decode, Debug)]

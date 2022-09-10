@@ -192,7 +192,7 @@ pub fn layout_parameters(instance: bool, types: &[&'static Il2CppType]) -> Param
             continue;
         }
         // B.4
-        if is_composite_ty(arg.ty.type_()) && get_ty_size(arg.ty)> 16 {
+        if is_composite_ty(arg.ty.type_()) && get_ty_size(arg.ty) > 16 {
             arg.ptr = true;
             arg.size = 8;
         }

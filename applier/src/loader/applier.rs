@@ -664,6 +664,19 @@ impl<'md> ModLoader<'md> {
             for field in &ty_def.fields {
                 let name = self.add_str(&field.name);
                 let ty = ty_resolver.resolve(field.ty, self, &ctx)?;
+                if let Some(default) = &field.default_val {
+                    self.metadata
+                        .field_default_values
+                        .push(Il2CppFieldDefaultValue {
+                            dataIndex: self.metadata.field_and_parameter_default_value_data.len()
+                                as i32,
+                            fieldIndex: self.metadata.fields.len() as i32,
+                            typeIndex: ty,
+                        });
+                    self.metadata
+                        .field_and_parameter_default_value_data
+                        .extend_from_slice(default)
+                }
                 self.metadata.fields.push(Il2CppFieldDefinition {
                     nameIndex: name,
                     typeIndex: ty,
@@ -694,6 +707,21 @@ impl<'md> ModLoader<'md> {
                 for param in &method.parameters {
                     let name = self.add_str(&param.name);
                     let ty = ty_resolver.resolve(param.ty, self, &ctx)?;
+                    if let Some(default) = &param.default_val {
+                        self.metadata
+                            .parameter_default_values
+                            .push(Il2CppParameterDefaultValue {
+                                dataIndex: self
+                                    .metadata
+                                    .field_and_parameter_default_value_data
+                                    .len() as i32,
+                                parameterIndex: self.metadata.parameters.len() as i32,
+                                typeIndex: ty,
+                            });
+                        self.metadata
+                            .field_and_parameter_default_value_data
+                            .extend_from_slice(default)
+                    }
                     self.metadata.parameters.push(Il2CppParameterDefinition {
                         nameIndex: name,
                         token: param.token,
@@ -934,7 +962,7 @@ impl<'md> ModLoader<'md> {
             );
         }
 
-        debug!("Updating mod invoker indicies");
+        debug!("Updating mod invoker indices");
         let invoker_idxs = unsafe {
             let code_gen_module = &*code_gen_module;
             slice::from_raw_parts_mut(

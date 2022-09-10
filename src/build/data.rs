@@ -116,6 +116,10 @@ pub struct ModDataBuilder<'md, 'ty> {
     mod_definitions: Option<ModDefinitions>,
     added_usage_lists: Vec<Vec<AddedMetadataUsagePair>>,
     added_string_literals: Vec<String>,
+
+    default_value_lens: HashMap<u32, u32>,
+    param_dv_locs: HashMap<u32, u32>,
+    field_dv_locs: HashMap<u32, u32>,
 }
 
 impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
@@ -129,7 +133,46 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             field_start_lookup.push(idx as u32);
         }
         field_start_lookup.sort_by_key(|&idx| metadata.type_definitions[idx as usize].field_start);
-        ModDataBuilder {
+
+        let mut default_value_starts: Vec<u32> = metadata
+            .parameter_default_values
+            .iter()
+            .map(|default| default.data_index)
+            .chain(
+                metadata
+                    .field_default_values
+                    .iter()
+                    .map(|default| default.data_index),
+            )
+            .filter(|&data_index| data_index != u32::MAX)
+            .collect();
+        default_value_starts.sort();
+        let mut default_value_lens = HashMap::new();
+        for i in 0..default_value_starts.len() {
+            let cur = default_value_starts[i];
+            let next = default_value_starts
+                .get(i + 1)
+                .copied()
+                .unwrap_or(metadata.field_and_parameter_default_value_data.len() as u32);
+            default_value_lens.insert(cur, next - cur);
+        }
+
+        let mut field_dv_locs = HashMap::new();
+        for default in &metadata.field_default_values {
+            if default.data_index == u32::MAX {
+                continue;
+            }
+            field_dv_locs.insert(default.field_index, default.data_index);
+        }
+        let mut param_dv_locs = HashMap::new();
+        for default in &metadata.parameter_default_values {
+            if default.data_index == u32::MAX {
+                continue;
+            }
+            param_dv_locs.insert(default.parameter_index, default.data_index);
+        }
+
+        Self {
             metadata,
             runtime_metadata,
             images: Vec::new(),
@@ -153,6 +196,9 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             mod_definitions: None,
             added_usage_lists: Vec::new(),
             added_string_literals: Vec::new(),
+            default_value_lens,
+            field_dv_locs,
+            param_dv_locs,
         }
     }
 
@@ -166,11 +212,17 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
             method_def.parameter_start,
             method_def.parameter_count as u32,
         );
-        for param in &self.metadata.parameters[params_range] {
+        for i in params_range {
+            let param = &self.metadata.parameters[i];
+            let default_val = self
+                .param_dv_locs
+                .get(&(i as u32))
+                .map(|&loc| self.get_default_value_data(loc));
             parameters.push(AddedParameter {
                 name: self.get_str(param.name_index as u32)?.to_string(),
                 token: param.token,
                 ty: self.add_type(param.type_index as u32)?,
+                default_val,
             });
         }
 
@@ -187,14 +239,26 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         })
     }
 
+    fn get_default_value_data(&self, loc: u32) -> Vec<u8> {
+        let len = self.default_value_lens[&loc] as usize;
+        self.metadata.field_and_parameter_default_value_data[loc as usize..loc as usize + len]
+            .to_vec()
+    }
+
     fn add_mod_ty_def(&mut self, ty_def: &Il2CppTypeDefinition) -> Result<AddedTypeDefinition> {
         let mut fields = Vec::new();
         let fields_range = offset_len(ty_def.field_start, ty_def.field_count as u32);
-        for field in &self.metadata.fields[fields_range] {
+        for i in fields_range {
+            let field = &self.metadata.fields[i];
+            let default_val = self
+                .field_dv_locs
+                .get(&(i as u32))
+                .map(|&loc| self.get_default_value_data(loc));
             fields.push(AddedField {
                 name: self.get_str(field.name_index as u32)?.to_string(),
                 token: field.token,
                 ty: self.add_type(field.type_index as u32)?,
+                default_val,
             });
         }
 
