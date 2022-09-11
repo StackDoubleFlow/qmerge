@@ -113,7 +113,6 @@ impl<'a> CompileCommand<'a> {
             .args(&["-shared", "-static-libstdc++", "-Wl,--no-undefined"])
             .arg("-o")
             .arg(&self.output_path)
-            // TODO: Get path to applier binary
             .arg(applier_path)
             .args(&object_files);
         // dbg!(&command);
