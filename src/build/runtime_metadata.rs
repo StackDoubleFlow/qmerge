@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 
+use super::parser::SourceParser;
+
 #[derive(Clone, Copy, Debug)]
 pub enum Il2CppTypeEnum {
     Void,
@@ -243,6 +245,8 @@ pub struct SourceGenericInst<'src> {
 }
 
 pub fn parse_inst_defs(src: &str) -> Result<(Vec<SourceGenericInst>, HashMap<&str, usize>)> {
+    let parser = SourceParser::new(src);
+
     let mut insts = HashMap::new();
     let insts_start = match src.find("static const Il2CppType* ") {
         Some(insts_start) => insts_start,
@@ -271,21 +275,19 @@ pub fn parse_inst_defs(src: &str) -> Result<(Vec<SourceGenericInst>, HashMap<&st
 
     let mut name_map = HashMap::new();
     let mut arr = Vec::new();
-    let arr_start = src
-        .find("const Il2CppGenericInst* const g_Il2CppGenericInstTable")
-        .context("could not find g_Il2CppGenericInstTable")?;
-    for (i, line) in src[arr_start..].lines().skip(3).enumerate() {
-        if line.starts_with('}') {
-            break;
-        }
-        let name = line.trim().trim_start_matches('&').trim_end_matches(',');
-        name_map.insert(name, i);
-        arr.push(
-            insts
-                .remove(name)
-                .context("gc table contained non-existant generic class")?,
-        );
-    }
+    parser
+        .parse_array("const Il2CppGenericInst* const", "g_Il2CppGenericInstTable")?
+        .enumerate()
+        .for_each(|(i, str)| {
+            let name = str.trim_start_matches('&');
+            name_map.insert(name, i);
+            arr.push(
+                insts
+                    .remove(name)
+                    .context("gc table contained non-existant generic class")
+                    .unwrap(),
+            );
+        });
 
     Ok((arr, name_map))
 }

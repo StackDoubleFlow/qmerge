@@ -1,3 +1,5 @@
+use anyhow::{bail, Result};
+
 pub fn is_included_ty(name: &str) -> bool {
     matches!(
         name,
@@ -98,4 +100,48 @@ pub fn try_parse_call(line: &str, include_inline: bool) -> Option<&str> {
     }
 
     None
+}
+
+pub struct SourceArrIterator<'src> {
+    lines: std::str::Lines<'src>,
+}
+
+impl<'src> Iterator for SourceArrIterator<'src> {
+    type Item = &'src str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.lines
+            .next()
+            .filter(|line| !line.starts_with('}'))
+            .map(|line| line.trim().trim_end_matches(','))
+    }
+}
+
+pub struct SourceParser<'src> {
+    src: &'src str,
+}
+
+impl<'src> SourceParser<'src> {
+    pub fn new(src: &'src str) -> Self {
+        Self { src }
+    }
+
+    pub fn parse_array(&self, ty: &str, name: &str) -> Result<SourceArrIterator<'src>> {
+        let mut lines = self.src.lines();
+
+        let header = format!("{ty} {name}");
+        loop {
+            let Some(line) = lines.next() else {
+                bail!("Could not find arr: {}", name);
+            };
+            if line.starts_with(&header) {
+                break;
+            }
+        }
+
+        // skip opening bracket
+        let _ = lines.next();
+
+        Ok(SourceArrIterator { lines })
+    }
 }

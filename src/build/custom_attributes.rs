@@ -3,7 +3,7 @@ use crate::build::parser::try_parse_call;
 use super::clang::CompileCommand;
 use super::convert_codegen_init_method;
 use super::function_usages::ModFunctionUsages;
-use super::parser::FnDecl;
+use super::parser::{FnDecl, SourceParser};
 use anyhow::{Context, Result};
 use il2cpp_metadata_raw::Il2CppImageDefinition;
 use std::collections::HashSet;
@@ -20,24 +20,22 @@ pub fn transform<'src>(
     metadata_usage_names: &mut HashSet<String>,
     function_usages: &mut ModFunctionUsages<'src>,
 ) -> Result<()> {
+    let parser = SourceParser::new(src);
+
     let mut generator_names = Vec::new();
     let mut names_set = HashSet::new();
-    let arr_start = src
-        .find("const CustomAttributesCacheGenerator g_AttributeGenerators")
-        .context("could not find g_AttributeGenerators")?;
-    for line in src[arr_start..]
-        .lines()
-        .skip(3 + image.custom_attribute_start as usize)
-        .take(image.custom_attribute_count as usize)
-    {
-        if line.starts_with('}') {
-            break;
-        }
-        let name = line.trim().trim_start_matches('&').trim_end_matches(',');
-        generator_names.push(name);
-        names_set.insert(name);
-        metadata_usage_names.insert(name.to_string());
-    }
+
+    parser
+        .parse_array(
+            "const CustomAttributesCacheGenerator",
+            "g_AttributeGenerators",
+        )?
+        .for_each(|str| {
+            let name = str.trim_start_matches('&');
+            generator_names.push(name);
+            names_set.insert(name);
+            metadata_usage_names.insert(name.to_string());
+        });
 
     let mut new_src = String::new();
     let mut lines = src.lines();
