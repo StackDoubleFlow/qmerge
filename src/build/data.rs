@@ -227,7 +227,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         }
 
         Ok(AddedMethod {
-            name: self.get_str(method_def.name_index as u32)?.to_string(),
+            name: self.get_str(method_def.name_index)?.to_string(),
             declaring_type: self.add_type_def(method_def.declaring_type)?,
             return_ty: self.add_type(method_def.return_type)?,
             parameters,
@@ -255,9 +255,9 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
                 .get(&(i as u32))
                 .map(|&loc| self.get_default_value_data(loc));
             fields.push(AddedField {
-                name: self.get_str(field.name_index as u32)?.to_string(),
+                name: self.get_str(field.name_index)?.to_string(),
                 token: field.token,
-                ty: self.add_type(field.type_index as u32)?,
+                ty: self.add_type(field.type_index)?,
                 default_val,
             });
         }
@@ -272,8 +272,8 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let events_range = offset_len(ty_def.event_start, ty_def.event_count as u32);
         for event in &self.metadata.events[events_range] {
             events.push(AddedEvent {
-                name: self.get_str(event.name_index as u32)?.to_string(),
-                ty: self.add_type(event.type_index as u32)?,
+                name: self.get_str(event.name_index)?.to_string(),
+                ty: self.add_type(event.type_index)?,
                 add: self.add_method(event.add)?,
                 remove: self.add_method(event.remove)?,
                 raise: self.add_method(event.raise)?,
@@ -285,7 +285,7 @@ impl<'md, 'ty> ModDataBuilder<'md, 'ty> {
         let properties_range = offset_len(ty_def.property_start, ty_def.property_count as u32);
         for property in &self.metadata.properties[properties_range] {
             properties.push(AddedProperty {
-                name: self.get_str(property.name_index as u32)?.to_string(),
+                name: self.get_str(property.name_index)?.to_string(),
                 get: self.add_method(property.get)?,
                 set: self.add_method(property.set)?,
                 attrs: property.attrs,
