@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use color_eyre::eyre::{bail, Result};
 
 pub fn is_included_ty(name: &str) -> bool {
     matches!(

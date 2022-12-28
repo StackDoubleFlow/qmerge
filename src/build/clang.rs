@@ -1,5 +1,5 @@
 use crate::utils::platform_executable;
-use anyhow::{anyhow, Context, Result};
+use color_eyre::eyre::{anyhow, Result, WrapErr};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

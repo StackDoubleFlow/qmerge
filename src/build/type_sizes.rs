@@ -1,6 +1,6 @@
 use super::clang::CompileCommand;
 use super::get_numbered_paths;
-use anyhow::{Context, Result};
+use color_eyre::eyre::{ContextCompat, Result};
 use il2cpp_metadata_raw::Il2CppImageDefinition;
 use std::fmt::Write;
 use std::fs;

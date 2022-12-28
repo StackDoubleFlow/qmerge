@@ -4,13 +4,12 @@ mod adb;
 mod build;
 mod cli;
 mod config;
-mod error;
 mod manifest;
 mod package;
 mod utils;
 
-use crate::error::exit_on_err;
+use color_eyre::Result;
 
-fn main() {
-    exit_on_err(cli::run());
+fn main() -> Result<()> {
+    cli::run()
 }

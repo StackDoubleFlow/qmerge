@@ -4,7 +4,7 @@ use super::clang::CompileCommand;
 use super::convert_codegen_init_method;
 use super::function_usages::ModFunctionUsages;
 use super::parser::{FnDecl, SourceParser};
-use anyhow::{Context, Result};
+use color_eyre::eyre::Result;
 use il2cpp_metadata_raw::Il2CppImageDefinition;
 use std::collections::HashSet;
 use std::fmt::Write;

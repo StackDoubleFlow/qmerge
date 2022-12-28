@@ -2,7 +2,7 @@ use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
 use super::StructDef;
 use crate::build::{add_cpp_ty, FnDecl};
-use anyhow::{bail, Context, Result};
+use color_eyre::eyre::{bail, ContextCompat, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::fs;

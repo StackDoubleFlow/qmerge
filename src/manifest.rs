@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use color_eyre::eyre::{Result, WrapErr};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;

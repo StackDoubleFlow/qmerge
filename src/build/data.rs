@@ -4,7 +4,7 @@ use super::runtime_metadata::{
     SrcGenericMethodFuncs,
 };
 use crate::manifest::Manifest;
-use anyhow::{bail, Context, Result};
+use color_eyre::eyre::{bail, ContextCompat, Result, WrapErr};
 use il2cpp_metadata_raw::{
     Il2CppAssemblyDefinition, Il2CppGenericContainer, Il2CppMethodDefinition, Il2CppTypeDefinition,
     Metadata,

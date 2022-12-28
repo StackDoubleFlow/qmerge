@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use color_eyre::eyre::{bail, ContextCompat, Result};
 use std::collections::HashMap;
 
 use super::parser::SourceParser;

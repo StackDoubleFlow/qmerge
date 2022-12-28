@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::manifest::Manifest;
-use anyhow::{bail, Context, Result};
+use color_eyre::eyre::{bail, ContextCompat, Result, WrapErr};
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;

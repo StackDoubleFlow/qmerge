@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::manifest::Manifest;
-use anyhow::{anyhow, Result};
+use color_eyre::eyre::{anyhow, Result};
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};

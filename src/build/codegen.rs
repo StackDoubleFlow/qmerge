@@ -1,7 +1,7 @@
 use super::clang::CompileCommand;
 use super::data::ModDataBuilder;
 use super::function_usages::ModFunctionUsages;
-use anyhow::{bail, Context, Result};
+use color_eyre::eyre::{bail, ContextCompat, Result};
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
