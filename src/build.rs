@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::Lines;
 use std::{fs, str};
+use tracing::debug;
 
 const CODGEN_HEADER: &str = include_str!("../include/merge/codegen.h");
 
@@ -276,15 +277,17 @@ pub fn build(regen_cpp: Option<String>, config: &mut Config) -> Result<()> {
             fs::remove_dir_all(&cpp_path)?;
         }
         fs::create_dir_all(&cpp_path)?;
-        Command::new(mono_path)
-            // Fix for System.ConsoleDriver type initializer
-            .env("TERM", "xterm")
+        let mut command = Command::new(mono_path);
+        // Fix for System.ConsoleDriver type initializer
+        command.env("TERM", "xterm")
             // Rider adds this which breaks things apparently
             .env_remove("MONO_GAC_PREFIX")
             .arg(il2cpp_path)
             .arg("--convert-to-cpp")
             .arg("--directory=./build/Managed")
-            .arg("--generatedcppdir=./build/sources/cpp")
+            .arg("--generatedcppdir=./build/sources/cpp");
+        debug!("il2cpp command: {:?}", &command);
+        command
             .status()
             .context("il2cpp command failed")?;
     }

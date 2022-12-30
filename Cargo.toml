@@ -19,6 +19,8 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 dirs = "4"
 zip = { version = "0.6", features = ["deflate"], default-features = false }
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 [patch.crates-io]
 bad64-sys = { git = "https://github.com/StackDoubleFlow/bad64-sys" }
