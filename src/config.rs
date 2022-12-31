@@ -76,6 +76,7 @@ struct ConfigTOML {
     unity_installs: Option<HashMap<String, String>>,
     ndk_path: Option<String>,
     adb_path: Option<String>,
+    use_system_mono: Option<bool>,
 }
 
 pub struct Config {
@@ -228,6 +229,20 @@ impl Config {
         };
 
         Ok(path)
+    }
+
+    pub fn get_use_system_mono(&mut self) -> Result<bool> {
+        let use_system_mono = match self.toml.use_system_mono {
+            Some(use_system_mono) => use_system_mono,
+            None => {
+                self.doc["use_system_mono"] = toml_edit::value(false);
+                self.save()?;
+                self.toml.use_system_mono = Some(false);
+                false
+            }
+        };
+
+        Ok(use_system_mono)
     }
 }
 

@@ -277,7 +277,11 @@ pub fn build(regen_cpp: Option<String>, config: &mut Config) -> Result<()> {
             fs::remove_dir_all(&cpp_path)?;
         }
         fs::create_dir_all(&cpp_path)?;
-        let mut command = Command::new(mono_path);
+        let mut command = if config.get_use_system_mono()? {
+            Command::new("mono")
+        } else {
+            Command::new(mono_path)
+        };
         // Fix for System.ConsoleDriver type initializer
         command.env("TERM", "xterm")
             // Rider adds this which breaks things apparently
